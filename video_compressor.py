@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SheCan 视频批量压缩工具 V2.1
+SheCan 视频批量压缩工具 V2.2
 跨平台支持 (macOS / Windows)
+内置 FFmpeg 自动下载
 """
 
 import sys
@@ -11,6 +12,10 @@ import subprocess
 import re
 import platform
 import multiprocessing
+import urllib.request
+import zipfile
+import tarfile
+import shutil
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -26,7 +31,182 @@ IS_MAC = platform.system() == 'Darwin'
 IS_WIN = platform.system() == 'Windows'
 CPU_COUNT = multiprocessing.cpu_count()
 
-# 编码器配置 - 跨平台
+# FFmpeg 下载地址
+FFMPEG_URLS = {
+    'Windows': 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
+    'Darwin': 'https://evermeet.cx/ffmpeg/getrelease/zip'
+}
+
+def get_app_data_dir():
+    """获取应用数据目录"""
+    if IS_WIN:
+        base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+        return os.path.join(base, 'SheCan', 'VideoCompressor')
+    else:
+        return os.path.expanduser('~/Library/Application Support/SheCan/VideoCompressor')
+
+def get_bundled_ffmpeg_path():
+    """获取内置 FFmpeg 路径"""
+    app_dir = get_app_data_dir()
+    if IS_WIN:
+        return os.path.join(app_dir, 'ffmpeg', 'ffmpeg.exe')
+    else:
+        return os.path.join(app_dir, 'ffmpeg', 'ffmpeg')
+
+def get_ffmpeg_path():
+    """获取 FFmpeg 路径，优先使用内置版本"""
+    # 1. 检查内置版本
+    bundled = get_bundled_ffmpeg_path()
+    if os.path.exists(bundled):
+        return bundled
+    
+    # 2. 检查打包目录
+    if IS_WIN and getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+        ffmpeg = os.path.join(base, 'ffmpeg', 'ffmpeg.exe')
+        if os.path.exists(ffmpeg):
+            return ffmpeg
+    
+    # 3. 检查系统路径
+    if IS_WIN:
+        return 'ffmpeg'
+    else:
+        paths = [
+            os.path.expanduser('~/bin/ffmpeg'),
+            '/usr/local/bin/ffmpeg',
+            '/opt/homebrew/bin/ffmpeg',
+        ]
+        for p in paths:
+            if os.path.exists(p):
+                return p
+        return 'ffmpeg'
+
+def get_ffprobe_path():
+    """获取 FFprobe 路径"""
+    ffmpeg = get_ffmpeg_path()
+    if IS_WIN:
+        return ffmpeg.replace('ffmpeg.exe', 'ffprobe.exe')
+    return ffmpeg.replace('ffmpeg', 'ffprobe')
+
+def is_ffmpeg_available():
+    """检查 FFmpeg 是否可用"""
+    try:
+        ffmpeg = get_ffmpeg_path()
+        kwargs = {'capture_output': True, 'timeout': 5}
+        if IS_WIN:
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        result = subprocess.run([ffmpeg, '-version'], **kwargs)
+        return result.returncode == 0
+    except:
+        return False
+
+
+class FFmpegDownloader(QThread):
+    """FFmpeg 下载线程"""
+    progress = pyqtSignal(int, str)  # percent, status
+    finished = pyqtSignal(bool, str)  # success, message
+    
+    def run(self):
+        try:
+            self.progress.emit(0, "准备下载 FFmpeg...")
+            
+            app_dir = get_app_data_dir()
+            os.makedirs(app_dir, exist_ok=True)
+            
+            system = platform.system()
+            url = FFMPEG_URLS.get(system)
+            
+            if not url:
+                self.finished.emit(False, "不支持的操作系统")
+                return
+            
+            # 下载文件
+            self.progress.emit(10, "正在下载 FFmpeg...")
+            
+            if IS_MAC:
+                # macOS: 下载 ffmpeg 和 ffprobe
+                zip_path = os.path.join(app_dir, 'ffmpeg.zip')
+                self._download_file(url, zip_path)
+                
+                self.progress.emit(50, "正在解压...")
+                ffmpeg_dir = os.path.join(app_dir, 'ffmpeg')
+                os.makedirs(ffmpeg_dir, exist_ok=True)
+                
+                with zipfile.ZipFile(zip_path, 'r') as zf:
+                    for member in zf.namelist():
+                        if 'ffmpeg' in member.lower():
+                            zf.extract(member, ffmpeg_dir)
+                            extracted = os.path.join(ffmpeg_dir, member)
+                            target = os.path.join(ffmpeg_dir, 'ffmpeg')
+                            if extracted != target:
+                                shutil.move(extracted, target)
+                            os.chmod(target, 0o755)
+                
+                # 下载 ffprobe
+                self.progress.emit(60, "正在下载 FFprobe...")
+                ffprobe_url = 'https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip'
+                probe_zip = os.path.join(app_dir, 'ffprobe.zip')
+                self._download_file(ffprobe_url, probe_zip)
+                
+                self.progress.emit(80, "正在解压 FFprobe...")
+                with zipfile.ZipFile(probe_zip, 'r') as zf:
+                    for member in zf.namelist():
+                        if 'ffprobe' in member.lower():
+                            zf.extract(member, ffmpeg_dir)
+                            extracted = os.path.join(ffmpeg_dir, member)
+                            target = os.path.join(ffmpeg_dir, 'ffprobe')
+                            if extracted != target:
+                                shutil.move(extracted, target)
+                            os.chmod(target, 0o755)
+                
+                os.remove(zip_path)
+                os.remove(probe_zip)
+                
+            else:
+                # Windows
+                zip_path = os.path.join(app_dir, 'ffmpeg.zip')
+                self._download_file(url, zip_path)
+                
+                self.progress.emit(60, "正在解压...")
+                
+                with zipfile.ZipFile(zip_path, 'r') as zf:
+                    zf.extractall(app_dir)
+                
+                # 找到解压后的目录
+                for item in os.listdir(app_dir):
+                    item_path = os.path.join(app_dir, item)
+                    if os.path.isdir(item_path) and 'ffmpeg' in item.lower():
+                        bin_dir = os.path.join(item_path, 'bin')
+                        if os.path.exists(bin_dir):
+                            target_dir = os.path.join(app_dir, 'ffmpeg')
+                            if os.path.exists(target_dir):
+                                shutil.rmtree(target_dir)
+                            shutil.move(bin_dir, target_dir)
+                            shutil.rmtree(item_path)
+                            break
+                
+                os.remove(zip_path)
+            
+            self.progress.emit(100, "完成")
+            
+            # 验证安装
+            if is_ffmpeg_available():
+                self.finished.emit(True, "FFmpeg 安装成功")
+            else:
+                self.finished.emit(False, "FFmpeg 安装失败，请手动安装")
+                
+        except Exception as e:
+            self.finished.emit(False, f"下载失败: {str(e)}")
+    
+    def _download_file(self, url, path):
+        """下载文件"""
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=60) as response:
+            with open(path, 'wb') as f:
+                f.write(response.read())
+
+
+# 编码器配置
 def get_encoders_config():
     """根据系统返回可用编码器配置"""
     encoders = {
@@ -90,35 +270,6 @@ def get_encoders_config():
 ENCODERS = get_encoders_config()
 
 
-def get_ffmpeg_path():
-    """获取 FFmpeg 路径"""
-    if IS_WIN:
-        if getattr(sys, 'frozen', False):
-            base = sys._MEIPASS
-            ffmpeg = os.path.join(base, 'ffmpeg', 'ffmpeg.exe')
-            if os.path.exists(ffmpeg):
-                return ffmpeg
-        return 'ffmpeg'
-    else:
-        paths = [
-            os.path.expanduser('~/bin/ffmpeg'),
-            '/usr/local/bin/ffmpeg',
-            '/opt/homebrew/bin/ffmpeg',
-            'ffmpeg'
-        ]
-        for p in paths:
-            if os.path.exists(p) or p == 'ffmpeg':
-                return p
-        return 'ffmpeg'
-
-def get_ffprobe_path():
-    """获取 FFprobe 路径"""
-    ffmpeg = get_ffmpeg_path()
-    if IS_WIN:
-        return ffmpeg.replace('ffmpeg.exe', 'ffprobe.exe')
-    return ffmpeg.replace('ffmpeg', 'ffprobe')
-
-
 def detect_available_encoders():
     """检测可用的编码器"""
     available = []
@@ -142,6 +293,96 @@ def detect_available_encoders():
     return available
 
 
+class FFmpegSetupDialog(QDialog):
+    """FFmpeg 安装对话框"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("安装 FFmpeg")
+        self.setFixedSize(400, 200)
+        self.setStyleSheet("QDialog { background: white; }")
+        
+        self.downloader = None
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
+        
+        title = QLabel("需要安装 FFmpeg")
+        title.setStyleSheet("font-size: 16px; font-weight: 600; color: #1d1d1f;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        
+        desc = QLabel("FFmpeg 是视频压缩的核心组件\n点击下方按钮自动下载安装（约 80MB）")
+        desc.setStyleSheet("font-size: 13px; color: #666;")
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(desc)
+        
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.progress.setVisible(False)
+        self.progress.setStyleSheet("""
+            QProgressBar { border: none; border-radius: 4px; background: #e0e0e0; height: 8px; }
+            QProgressBar::chunk { background: #007AFF; border-radius: 4px; }
+        """)
+        layout.addWidget(self.progress)
+        
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("font-size: 12px; color: #666;")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.status_label)
+        
+        layout.addStretch()
+        
+        btn_row = QHBoxLayout()
+        
+        self.cancel_btn = QPushButton("取消")
+        self.cancel_btn.setFixedSize(100, 32)
+        self.cancel_btn.setStyleSheet("""
+            QPushButton { background: #f0f0f0; border: none; border-radius: 6px; color: #333; font-size: 13px; }
+            QPushButton:hover { background: #e0e0e0; }
+        """)
+        self.cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(self.cancel_btn)
+        
+        btn_row.addStretch()
+        
+        self.install_btn = QPushButton("自动安装")
+        self.install_btn.setFixedSize(100, 32)
+        self.install_btn.setStyleSheet("""
+            QPushButton { background: #007AFF; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; }
+            QPushButton:hover { background: #0066d6; }
+            QPushButton:disabled { background: #ccc; }
+        """)
+        self.install_btn.clicked.connect(self.start_download)
+        btn_row.addWidget(self.install_btn)
+        
+        layout.addLayout(btn_row)
+    
+    def start_download(self):
+        self.install_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(False)
+        self.progress.setVisible(True)
+        
+        self.downloader = FFmpegDownloader()
+        self.downloader.progress.connect(self.on_progress)
+        self.downloader.finished.connect(self.on_finished)
+        self.downloader.start()
+    
+    def on_progress(self, percent, status):
+        self.progress.setValue(percent)
+        self.status_label.setText(status)
+    
+    def on_finished(self, success, message):
+        if success:
+            self.accept()
+        else:
+            self.status_label.setText(message)
+            self.status_label.setStyleSheet("font-size: 12px; color: #ff3b30;")
+            self.install_btn.setEnabled(True)
+            self.cancel_btn.setEnabled(True)
+
+
 class ResultDialog(QDialog):
     """结果弹窗"""
     def __init__(self, parent, completed, total, input_size, output_size):
@@ -160,10 +401,7 @@ class ResultDialog(QDialog):
         layout.addWidget(title)
         
         saved = input_size - output_size
-        if input_size > 0:
-            ratio = abs(saved) / input_size * 100
-        else:
-            ratio = 0
+        ratio = abs(saved) / input_size * 100 if input_size > 0 else 0
         
         info_data = [
             ("成功处理:", f"{completed}/{total} 个文件", "#333"),
@@ -221,11 +459,9 @@ class VideoInfoWorker(QThread):
             ffprobe = get_ffprobe_path()
             cmd = [ffprobe, '-v', 'error', '-show_entries', 'format=duration',
                    '-of', 'default=noprint_wrappers=1:nokey=1', self.filepath]
-            
             kwargs = {'capture_output': True, 'text': True, 'timeout': 10}
             if IS_WIN:
                 kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-            
             result = subprocess.run(cmd, **kwargs)
             if result.returncode == 0 and result.stdout.strip():
                 dur = float(result.stdout.strip())
@@ -234,7 +470,6 @@ class VideoInfoWorker(QThread):
                 dur_str = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
         except Exception as e:
             print(f"获取时长失败: {e}")
-        
         self.info_ready.emit(self.row, dur_str)
 
 
@@ -319,12 +554,8 @@ class CompressionWorker(QThread):
             elif res == '480p':
                 cmd.extend(['-vf', 'scale=-2:480'])
             
-            cmd.extend([
-                '-threads', str(threads),
-                '-c:a', 'aac', '-b:a', '128k',
-                '-movflags', '+faststart',
-                '-y', out_path
-            ])
+            cmd.extend(['-threads', str(threads), '-c:a', 'aac', '-b:a', '128k',
+                       '-movflags', '+faststart', '-y', out_path])
             
             duration = self.get_duration(in_path)
             
@@ -339,7 +570,6 @@ class CompressionWorker(QThread):
                     if self.should_stop:
                         self.process.terminate()
                         break
-                    
                     match = re.search(r'time=(\d+):(\d+):(\d+\.?\d*)', line)
                     if match and duration > 0:
                         h, m, s = match.groups()
@@ -360,7 +590,6 @@ class CompressionWorker(QThread):
                         self.file_done.emit(i, False, 0)
                 else:
                     self.file_done.emit(i, False, 0)
-                    
             except Exception as e:
                 print(f"压缩异常: {e}")
                 self.file_done.emit(i, False, 0)
@@ -407,28 +636,21 @@ class DropArea(QFrame):
         bg = "#f0f7ff" if hover else "#fafafa"
         self.setStyleSheet(f"QFrame {{ border: 1.5px dashed {color}; border-radius: 10px; background: {bg}; }}")
     
-    def mousePressEvent(self, e):
-        self.clicked.emit()
-    
-    def enterEvent(self, e):
-        self._update_style(True)
-    
-    def leaveEvent(self, e):
-        self._update_style(False)
+    def mousePressEvent(self, e): self.clicked.emit()
+    def enterEvent(self, e): self._update_style(True)
+    def leaveEvent(self, e): self._update_style(False)
     
     def dragEnterEvent(self, e):
         if e.mimeData().hasUrls():
             e.acceptProposedAction()
             self._update_style(True)
     
-    def dragLeaveEvent(self, e):
-        self._update_style(False)
+    def dragLeaveEvent(self, e): self._update_style(False)
     
     def dropEvent(self, e):
         self._update_style(False)
         files = []
         exts = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.ts'}
-        
         for url in e.mimeData().urls():
             p = url.toLocalFile()
             if os.path.isfile(p) and Path(p).suffix.lower() in exts:
@@ -437,7 +659,6 @@ class DropArea(QFrame):
                 for f in Path(p).rglob('*'):
                     if f.is_file() and f.suffix.lower() in exts:
                         files.append(str(f))
-        
         if files:
             self.files_dropped.emit(files)
 
@@ -458,31 +679,16 @@ class MainWindow(QMainWindow):
         
         self.setStyleSheet("""
             QMainWindow { background-color: #f5f5f7; }
-            QComboBox {
-                padding: 5px 10px; border: 1px solid #d2d2d7; border-radius: 5px;
-                background: white; color: #333; min-width: 80px; font-size: 13px;
-            }
+            QComboBox { padding: 5px 10px; border: 1px solid #d2d2d7; border-radius: 5px; background: white; color: #333; min-width: 80px; font-size: 13px; }
             QComboBox:hover { border-color: #007AFF; }
             QComboBox::drop-down { border: none; width: 18px; }
-            QComboBox QAbstractItemView {
-                background: white; color: #333; border: 1px solid #d2d2d7;
-                selection-background-color: #007AFF; selection-color: white;
-            }
-            QLineEdit {
-                padding: 5px 10px; border: 1px solid #d2d2d7; border-radius: 5px;
-                background: white; color: #333; font-size: 13px;
-            }
+            QComboBox QAbstractItemView { background: white; color: #333; border: 1px solid #d2d2d7; selection-background-color: #007AFF; selection-color: white; }
+            QLineEdit { padding: 5px 10px; border: 1px solid #d2d2d7; border-radius: 5px; background: white; color: #333; font-size: 13px; }
             QLineEdit:focus { border-color: #007AFF; }
-            QTableWidget {
-                border: 1px solid #d2d2d7; border-radius: 8px; background: white;
-                color: #333; font-size: 13px;
-            }
+            QTableWidget { border: 1px solid #d2d2d7; border-radius: 8px; background: white; color: #333; font-size: 13px; }
             QTableWidget::item { padding: 4px 8px; color: #333; }
             QTableWidget::item:selected { background-color: #007AFF; color: white; }
-            QHeaderView::section {
-                background: #fafafa; border: none; border-bottom: 1px solid #e0e0e0;
-                padding: 8px; font-weight: 500; font-size: 12px; color: #666;
-            }
+            QHeaderView::section { background: #fafafa; border: none; border-bottom: 1px solid #e0e0e0; padding: 8px; font-weight: 500; font-size: 12px; color: #666; }
             QProgressBar { border: none; border-radius: 3px; background: #e0e0e0; height: 6px; }
             QProgressBar::chunk { background: #007AFF; border-radius: 3px; }
         """)
@@ -533,31 +739,19 @@ class MainWindow(QMainWindow):
         settings_layout.setContentsMargins(14, 10, 14, 10)
         settings_layout.setSpacing(20)
         
-        # 质量
-        q_label = QLabel("质量")
-        q_label.setStyleSheet("font-size: 13px; color: #666;")
-        settings_layout.addWidget(q_label)
-        self.quality_combo = QComboBox()
-        self.quality_combo.addItems(['高质量', '平衡', '小体积'])
-        self.quality_combo.setCurrentText('平衡')
-        settings_layout.addWidget(self.quality_combo)
-        
-        # 速度
-        s_label = QLabel("速度")
-        s_label.setStyleSheet("font-size: 13px; color: #666;")
-        settings_layout.addWidget(s_label)
-        self.speed_combo = QComboBox()
-        self.speed_combo.addItems(['快速', '平衡', '高压缩'])
-        self.speed_combo.setCurrentText('平衡')
-        settings_layout.addWidget(self.speed_combo)
-        
-        # 分辨率
-        r_label = QLabel("分辨率")
-        r_label.setStyleSheet("font-size: 13px; color: #666;")
-        settings_layout.addWidget(r_label)
-        self.resolution_combo = QComboBox()
-        self.resolution_combo.addItems(['保持原始', '1080p', '720p', '480p'])
-        settings_layout.addWidget(self.resolution_combo)
+        for lbl, items, default in [("质量", ['高质量', '平衡', '小体积'], '平衡'),
+                                     ("速度", ['快速', '平衡', '高压缩'], '平衡'),
+                                     ("分辨率", ['保持原始', '1080p', '720p', '480p'], '保持原始')]:
+            l = QLabel(lbl)
+            l.setStyleSheet("font-size: 13px; color: #666;")
+            settings_layout.addWidget(l)
+            combo = QComboBox()
+            combo.addItems(items)
+            combo.setCurrentText(default)
+            settings_layout.addWidget(combo)
+            if lbl == "质量": self.quality_combo = combo
+            elif lbl == "速度": self.speed_combo = combo
+            else: self.resolution_combo = combo
         
         settings_layout.addStretch()
         layout.addWidget(settings_frame)
@@ -577,23 +771,12 @@ class MainWindow(QMainWindow):
         self.output_edit.setReadOnly(True)
         output_layout.addWidget(self.output_edit, 1)
         
-        browse_btn = QPushButton("选择")
-        browse_btn.setFixedSize(60, 28)
-        browse_btn.setStyleSheet("""
-            QPushButton { background: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; }
-            QPushButton:hover { background: #e0e0e0; }
-        """)
-        browse_btn.clicked.connect(self.browse_output)
-        output_layout.addWidget(browse_btn)
-        
-        clear_out_btn = QPushButton("清除")
-        clear_out_btn.setFixedSize(60, 28)
-        clear_out_btn.setStyleSheet("""
-            QPushButton { background: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; }
-            QPushButton:hover { background: #e0e0e0; }
-        """)
-        clear_out_btn.clicked.connect(lambda: self.output_edit.clear())
-        output_layout.addWidget(clear_out_btn)
+        for text, slot in [("选择", self.browse_output), ("清除", lambda: self.output_edit.clear())]:
+            btn = QPushButton(text)
+            btn.setFixedSize(60, 28)
+            btn.setStyleSheet("QPushButton { background: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; } QPushButton:hover { background: #e0e0e0; }")
+            btn.clicked.connect(slot)
+            output_layout.addWidget(btn)
         
         layout.addWidget(output_frame)
         
@@ -606,49 +789,28 @@ class MainWindow(QMainWindow):
         # 文件操作按钮
         btn_row = QHBoxLayout()
         
-        add_file_btn = QPushButton("添加文件")
-        add_file_btn.setFixedHeight(30)
-        add_file_btn.setStyleSheet("""
-            QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; }
-            QPushButton:hover { background: #f5f5f5; border-color: #007AFF; }
-        """)
-        add_file_btn.clicked.connect(self.browse_files)
-        btn_row.addWidget(add_file_btn)
-        
-        add_folder_btn = QPushButton("添加文件夹")
-        add_folder_btn.setFixedHeight(30)
-        add_folder_btn.setStyleSheet("""
-            QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; }
-            QPushButton:hover { background: #f5f5f5; border-color: #007AFF; }
-        """)
-        add_folder_btn.clicked.connect(self.browse_folder)
-        btn_row.addWidget(add_folder_btn)
+        for text, slot, style in [
+            ("添加文件", self.browse_files, "normal"),
+            ("添加文件夹", self.browse_folder, "normal")
+        ]:
+            btn = QPushButton(text)
+            btn.setFixedHeight(30)
+            btn.setStyleSheet("QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; } QPushButton:hover { background: #f5f5f5; border-color: #007AFF; }")
+            btn.clicked.connect(slot)
+            btn_row.addWidget(btn)
         
         btn_row.addStretch()
-        
         self.file_count_label = QLabel("共 0 个文件")
         self.file_count_label.setStyleSheet("font-size: 12px; color: #666;")
         btn_row.addWidget(self.file_count_label)
-        
         btn_row.addStretch()
         
-        remove_btn = QPushButton("移除选中")
-        remove_btn.setFixedHeight(30)
-        remove_btn.setStyleSheet("""
-            QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; }
-            QPushButton:hover { background: #fff0f0; border-color: #ff3b30; color: #ff3b30; }
-        """)
-        remove_btn.clicked.connect(self.remove_selected)
-        btn_row.addWidget(remove_btn)
-        
-        clear_btn = QPushButton("清空列表")
-        clear_btn.setFixedHeight(30)
-        clear_btn.setStyleSheet("""
-            QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; }
-            QPushButton:hover { background: #fff0f0; border-color: #ff3b30; color: #ff3b30; }
-        """)
-        clear_btn.clicked.connect(self.clear_files)
-        btn_row.addWidget(clear_btn)
+        for text, slot in [("移除选中", self.remove_selected), ("清空列表", self.clear_files)]:
+            btn = QPushButton(text)
+            btn.setFixedHeight(30)
+            btn.setStyleSheet("QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; } QPushButton:hover { background: #fff0f0; border-color: #ff3b30; color: #ff3b30; }")
+            btn.clicked.connect(slot)
+            btn_row.addWidget(btn)
         
         layout.addLayout(btn_row)
         
@@ -657,24 +819,16 @@ class MainWindow(QMainWindow):
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(['文件名', '时长', '大小', '进度', '压缩后', '状态'])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(1, 70)
-        self.table.setColumnWidth(2, 80)
-        self.table.setColumnWidth(3, 100)
-        self.table.setColumnWidth(4, 80)
-        self.table.setColumnWidth(5, 80)
+        for i, w in [(1, 70), (2, 80), (3, 100), (4, 80), (5, 80)]:
+            self.table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(i, w)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
         layout.addWidget(self.table, 1)
         
-        # 底部进度和按钮
+        # 底部
         bottom_row = QHBoxLayout()
-        
         self.total_progress = QProgressBar()
         self.total_progress.setFixedHeight(8)
         self.total_progress.setTextVisible(False)
@@ -687,195 +841,120 @@ class MainWindow(QMainWindow):
         self.stop_btn = QPushButton("停止")
         self.stop_btn.setFixedSize(70, 32)
         self.stop_btn.setEnabled(False)
-        self.stop_btn.setStyleSheet("""
-            QPushButton { background: #ff3b30; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; }
-            QPushButton:hover { background: #e0352b; }
-            QPushButton:disabled { background: #ccc; }
-        """)
+        self.stop_btn.setStyleSheet("QPushButton { background: #ff3b30; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; } QPushButton:hover { background: #e0352b; } QPushButton:disabled { background: #ccc; }")
         self.stop_btn.clicked.connect(self.stop_compression)
         bottom_row.addWidget(self.stop_btn)
         
         self.start_btn = QPushButton("开始压缩")
         self.start_btn.setFixedSize(100, 32)
-        self.start_btn.setStyleSheet("""
-            QPushButton { background: #007AFF; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; }
-            QPushButton:hover { background: #0066d6; }
-            QPushButton:disabled { background: #ccc; }
-        """)
+        self.start_btn.setStyleSheet("QPushButton { background: #007AFF; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; } QPushButton:hover { background: #0066d6; } QPushButton:disabled { background: #ccc; }")
         self.start_btn.clicked.connect(self.start_compression)
         bottom_row.addWidget(self.start_btn)
         
         layout.addLayout(bottom_row)
-
     
     def on_encoder_changed(self, name):
-        """编码器切换时更新提示"""
         if name in ENCODERS:
             cfg = ENCODERS[name]
-            encoder = cfg['encoder']
-            if 'videotoolbox' in encoder:
-                self.encoder_info.setText("使用 Apple 硬件加速，速度快")
-            elif 'nvenc' in encoder:
-                self.encoder_info.setText("使用 NVIDIA GPU 加速")
-            elif 'amf' in encoder:
-                self.encoder_info.setText("使用 AMD GPU 加速")
-            elif 'qsv' in encoder:
-                self.encoder_info.setText("使用 Intel 核显加速")
-            elif 'libx265' in encoder:
-                self.encoder_info.setText("H.265 编码，体积更小但兼容性稍差")
-            else:
-                self.encoder_info.setText("CPU 编码，兼容性最好")
-            
-            # 更新速度选项可用性
-            has_preset = cfg.get('has_preset', False)
-            self.speed_combo.setEnabled(has_preset)
-            if not has_preset:
-                self.speed_combo.setCurrentText('平衡')
+            enc = cfg['encoder']
+            info_map = {
+                'videotoolbox': "使用 Apple 硬件加速，速度快",
+                'nvenc': "使用 NVIDIA GPU 加速",
+                'amf': "使用 AMD GPU 加速",
+                'qsv': "使用 Intel 核显加速",
+                'libx265': "H.265 编码，体积更小但兼容性稍差"
+            }
+            self.encoder_info.setText(next((v for k, v in info_map.items() if k in enc), "CPU 编码，兼容性最好"))
+            self.speed_combo.setEnabled(cfg.get('has_preset', False))
     
     def check_environment(self):
-        """检查环境"""
-        ffmpeg = get_ffmpeg_path()
-        try:
-            kwargs = {'capture_output': True, 'timeout': 5}
-            if IS_WIN:
-                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-            result = subprocess.run([ffmpeg, '-version'], **kwargs)
-            if result.returncode == 0:
-                self.status_indicator.setText("● FFmpeg 就绪")
-                self.status_indicator.setStyleSheet("font-size: 11px; color: #34c759;")
-                
-                # 检测可用编码器
-                self.available_encoders = detect_available_encoders()
-                self.encoder_combo.clear()
-                self.encoder_combo.addItems(self.available_encoders)
-                
-                # 默认选择推荐编码器
-                if IS_MAC and 'Apple GPU H.264 (推荐)' in self.available_encoders:
-                    self.encoder_combo.setCurrentText('Apple GPU H.264 (推荐)')
-                elif IS_WIN and 'NVIDIA GPU (N卡加速)' in self.available_encoders:
-                    self.encoder_combo.setCurrentText('NVIDIA GPU (N卡加速)')
-            else:
-                self._show_ffmpeg_error()
-        except Exception as e:
-            self._show_ffmpeg_error()
-    
-    def _show_ffmpeg_error(self):
-        self.status_indicator.setText("● FFmpeg 未找到")
-        self.status_indicator.setStyleSheet("font-size: 11px; color: #ff3b30;")
-        self.start_btn.setEnabled(False)
-        
-        if IS_MAC:
-            msg = "请安装 FFmpeg:\nbrew install ffmpeg\n或从 https://ffmpeg.org 下载"
+        if is_ffmpeg_available():
+            self.status_indicator.setText("● FFmpeg 就绪")
+            self.status_indicator.setStyleSheet("font-size: 11px; color: #34c759;")
+            self.available_encoders = detect_available_encoders()
+            self.encoder_combo.clear()
+            self.encoder_combo.addItems(self.available_encoders)
+            if IS_MAC and 'Apple GPU H.264 (推荐)' in self.available_encoders:
+                self.encoder_combo.setCurrentText('Apple GPU H.264 (推荐)')
+            elif IS_WIN and 'NVIDIA GPU (N卡加速)' in self.available_encoders:
+                self.encoder_combo.setCurrentText('NVIDIA GPU (N卡加速)')
         else:
-            msg = "请安装 FFmpeg:\n从 https://ffmpeg.org 下载并添加到系统 PATH"
-        QMessageBox.warning(self, "缺少依赖", msg)
+            self.status_indicator.setText("● FFmpeg 未安装")
+            self.status_indicator.setStyleSheet("font-size: 11px; color: #ff9500;")
+            self.start_btn.setEnabled(False)
+            # 弹出安装对话框
+            dialog = FFmpegSetupDialog(self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.check_environment()  # 重新检查
+            else:
+                QMessageBox.warning(self, "提示", "未安装 FFmpeg，无法使用压缩功能")
     
     def browse_output(self):
-        """选择输出目录"""
         folder = QFileDialog.getExistingDirectory(self, "选择输出目录")
         if folder:
             self.output_edit.setText(folder)
     
     def browse_files(self):
-        """选择文件"""
-        files, _ = QFileDialog.getOpenFileNames(
-            self, "选择视频文件", "",
-            "视频文件 (*.mp4 *.mkv *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.ts);;所有文件 (*)"
-        )
+        files, _ = QFileDialog.getOpenFileNames(self, "选择视频文件", "",
+            "视频文件 (*.mp4 *.mkv *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.ts);;所有文件 (*)")
         if files:
             self.add_files(files)
     
     def browse_folder(self):
-        """选择文件夹"""
         folder = QFileDialog.getExistingDirectory(self, "选择文件夹")
         if folder:
             exts = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.ts'}
-            files = []
-            for f in Path(folder).rglob('*'):
-                if f.is_file() and f.suffix.lower() in exts:
-                    files.append(str(f))
+            files = [str(f) for f in Path(folder).rglob('*') if f.is_file() and f.suffix.lower() in exts]
             if files:
                 self.add_files(files)
     
     def add_files(self, paths):
-        """添加文件到列表"""
         existing = {f['path'] for f in self.files}
-        
         for p in paths:
             if p in existing:
                 continue
-            
             try:
                 size = os.path.getsize(p)
                 name = os.path.basename(p)
-                
-                self.files.append({
-                    'path': p,
-                    'name': name,
-                    'size': size
-                })
+                self.files.append({'path': p, 'name': name, 'size': size})
                 
                 row = self.table.rowCount()
                 self.table.insertRow(row)
                 
-                # 文件名
                 name_item = QTableWidgetItem(name)
                 name_item.setToolTip(p)
                 self.table.setItem(row, 0, name_item)
                 
-                # 时长 (异步获取)
-                dur_item = QTableWidgetItem("...")
-                dur_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.table.setItem(row, 1, dur_item)
+                for col, text in [(1, "..."), (2, self.fmt(size)), (4, "-"), (5, "等待")]:
+                    item = QTableWidgetItem(text)
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    if col == 5:
+                        item.setForeground(QColor("#666"))
+                    self.table.setItem(row, col, item)
                 
-                # 大小
-                size_item = QTableWidgetItem(self.fmt(size))
-                size_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.table.setItem(row, 2, size_item)
-                
-                # 进度
                 progress_bar = QProgressBar()
                 progress_bar.setRange(0, 100)
                 progress_bar.setValue(0)
                 progress_bar.setTextVisible(True)
                 progress_bar.setFormat("%p%")
-                progress_bar.setStyleSheet("""
-                    QProgressBar { border: none; border-radius: 3px; background: #e0e0e0; height: 16px; text-align: center; font-size: 11px; color: #333; }
-                    QProgressBar::chunk { background: #007AFF; border-radius: 3px; }
-                """)
+                progress_bar.setStyleSheet("QProgressBar { border: none; border-radius: 3px; background: #e0e0e0; height: 16px; text-align: center; font-size: 11px; color: #333; } QProgressBar::chunk { background: #007AFF; border-radius: 3px; }")
                 self.table.setCellWidget(row, 3, progress_bar)
                 
-                # 压缩后大小
-                out_item = QTableWidgetItem("-")
-                out_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.table.setItem(row, 4, out_item)
-                
-                # 状态
-                status_item = QTableWidgetItem("等待")
-                status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                status_item.setForeground(QColor("#666"))
-                self.table.setItem(row, 5, status_item)
-                
-                # 异步获取时长
                 worker = VideoInfoWorker(row, p)
                 worker.info_ready.connect(self.on_video_info)
                 self.info_workers.append(worker)
                 worker.start()
-                
             except Exception as e:
                 print(f"添加文件失败: {e}")
-        
         self.update_count()
     
     def on_video_info(self, row, duration):
-        """更新视频时长"""
         if row < self.table.rowCount():
             item = self.table.item(row, 1)
             if item:
                 item.setText(duration)
     
     def remove_selected(self):
-        """移除选中的文件"""
         rows = sorted(set(idx.row() for idx in self.table.selectedIndexes()), reverse=True)
         for row in rows:
             if row < len(self.files):
@@ -884,19 +963,16 @@ class MainWindow(QMainWindow):
         self.update_count()
     
     def clear_files(self):
-        """清空文件列表"""
         self.files.clear()
         self.table.setRowCount(0)
         self.update_count()
     
     def update_count(self):
-        """更新文件计数"""
         count = len(self.files)
         total_size = sum(f['size'] for f in self.files)
         self.file_count_label.setText(f"共 {count} 个文件，{self.fmt(total_size)}")
     
     def fmt(self, size):
-        """格式化文件大小"""
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
             if size < 1024:
                 return f"{size:.1f} {unit}"
@@ -904,7 +980,6 @@ class MainWindow(QMainWindow):
         return f"{size:.1f} PB"
     
     def start_compression(self):
-        """开始压缩"""
         if not self.files:
             QMessageBox.information(self, "提示", "请先添加视频文件")
             return
@@ -917,33 +992,22 @@ class MainWindow(QMainWindow):
             'output_dir': self.output_edit.text() or None
         }
         
-        # 重置状态
         for row in range(self.table.rowCount()):
-            progress_bar = self.table.cellWidget(row, 3)
-            if progress_bar:
-                progress_bar.setValue(0)
-            
-            out_item = self.table.item(row, 4)
-            if out_item:
-                out_item.setText("-")
-            
-            status_item = self.table.item(row, 5)
-            if status_item:
-                status_item.setText("等待")
-                status_item.setForeground(QColor("#666"))
+            pb = self.table.cellWidget(row, 3)
+            if pb: pb.setValue(0)
+            for col, text in [(4, "-"), (5, "等待")]:
+                item = self.table.item(row, col)
+                if item:
+                    item.setText(text)
+                    if col == 5: item.setForeground(QColor("#666"))
         
         self.total_progress.setValue(0)
         self.progress_label.setText("准备中...")
-        
-        # 禁用控件
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
-        self.encoder_combo.setEnabled(False)
-        self.quality_combo.setEnabled(False)
-        self.speed_combo.setEnabled(False)
-        self.resolution_combo.setEnabled(False)
+        for combo in [self.encoder_combo, self.quality_combo, self.speed_combo, self.resolution_combo]:
+            combo.setEnabled(False)
         
-        # 启动工作线程
         self.worker = CompressionWorker(self.files.copy(), settings)
         self.worker.progress.connect(self.on_progress)
         self.worker.file_done.connect(self.on_file_done)
@@ -952,106 +1016,71 @@ class MainWindow(QMainWindow):
         self.worker.start()
     
     def stop_compression(self):
-        """停止压缩"""
         if self.worker:
             self.worker.stop()
             self.progress_label.setText("正在停止...")
     
     def on_progress(self, index, percent, status):
-        """更新进度"""
         if index < self.table.rowCount():
-            progress_bar = self.table.cellWidget(index, 3)
-            if progress_bar:
-                progress_bar.setValue(percent)
-            
-            status_item = self.table.item(index, 5)
-            if status_item:
-                status_item.setText(status)
-                status_item.setForeground(QColor("#007AFF"))
-        
-        # 更新总进度
+            pb = self.table.cellWidget(index, 3)
+            if pb: pb.setValue(percent)
+            item = self.table.item(index, 5)
+            if item:
+                item.setText(status)
+                item.setForeground(QColor("#007AFF"))
         total = len(self.files)
         if total > 0:
-            overall = int((index * 100 + percent) / total)
-            self.total_progress.setValue(overall)
+            self.total_progress.setValue(int((index * 100 + percent) / total))
             self.progress_label.setText(f"处理中 {index + 1}/{total}")
     
     def on_file_done(self, index, success, output_size):
-        """单个文件完成"""
         if index < self.table.rowCount():
-            progress_bar = self.table.cellWidget(index, 3)
+            pb = self.table.cellWidget(index, 3)
             status_item = self.table.item(index, 5)
             out_item = self.table.item(index, 4)
             
             if success:
-                if progress_bar:
-                    progress_bar.setValue(100)
-                
-                if out_item:
-                    out_item.setText(self.fmt(output_size))
-                
+                if pb: pb.setValue(100)
+                if out_item: out_item.setText(self.fmt(output_size))
                 if status_item:
-                    # 计算压缩比
                     in_size = self.files[index]['size']
                     diff = in_size - output_size
-                    if in_size > 0:
-                        ratio = abs(diff) / in_size * 100
-                        if diff > 0:
-                            status_item.setText(f"-{ratio:.0f}%")
-                            status_item.setForeground(QColor("#34c759"))
-                        else:
-                            status_item.setText(f"+{ratio:.0f}%")
-                            status_item.setForeground(QColor("#ff9500"))
-                    else:
-                        status_item.setText("完成")
+                    ratio = abs(diff) / in_size * 100 if in_size > 0 else 0
+                    if diff > 0:
+                        status_item.setText(f"-{ratio:.0f}%")
                         status_item.setForeground(QColor("#34c759"))
+                    else:
+                        status_item.setText(f"+{ratio:.0f}%")
+                        status_item.setForeground(QColor("#ff9500"))
             else:
-                if progress_bar:
-                    progress_bar.setValue(0)
-                    progress_bar.setStyleSheet("""
-                        QProgressBar { border: none; border-radius: 3px; background: #ffe0e0; height: 16px; text-align: center; font-size: 11px; color: #333; }
-                        QProgressBar::chunk { background: #ff3b30; border-radius: 3px; }
-                    """)
-                
+                if pb:
+                    pb.setValue(0)
+                    pb.setStyleSheet("QProgressBar { border: none; border-radius: 3px; background: #ffe0e0; height: 16px; text-align: center; font-size: 11px; color: #333; } QProgressBar::chunk { background: #ff3b30; border-radius: 3px; }")
                 if status_item:
                     status_item.setText("失败")
                     status_item.setForeground(QColor("#ff3b30"))
     
     def on_all_done(self, completed, total, input_size, output_size):
-        """全部完成"""
         self.total_progress.setValue(100)
         self.progress_label.setText(f"完成 {completed}/{total}")
-        
-        # 恢复控件
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
-        self.encoder_combo.setEnabled(True)
-        self.quality_combo.setEnabled(True)
-        
+        for combo in [self.encoder_combo, self.quality_combo, self.resolution_combo]:
+            combo.setEnabled(True)
         enc_name = self.encoder_combo.currentText()
         if enc_name in ENCODERS:
-            has_preset = ENCODERS[enc_name].get('has_preset', False)
-            self.speed_combo.setEnabled(has_preset)
-        
-        self.resolution_combo.setEnabled(True)
-        
-        # 显示结果弹窗
+            self.speed_combo.setEnabled(ENCODERS[enc_name].get('has_preset', False))
         if completed > 0:
-            dialog = ResultDialog(self, completed, total, input_size, output_size)
-            dialog.exec()
+            ResultDialog(self, completed, total, input_size, output_size).exec()
 
 
 def main():
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
-    
-    # 设置应用信息
     app.setApplicationName("SheCan 视频压缩工具")
     app.setOrganizationName("SheCan")
-    
     window = MainWindow()
     window.show()
-    
     sys.exit(app.exec())
 
 

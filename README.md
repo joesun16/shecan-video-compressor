@@ -9,12 +9,12 @@
 ### macOS
 1. 下载 [macOS 安装包](https://github.com/joesun16/shecan-video-compressor/releases/latest)（.dmg 文件）
 2. 双击打开，将应用拖到「应用程序」文件夹
-3. 安装 FFmpeg：`brew install ffmpeg`
+3. 首次运行会自动下载 FFmpeg（约 80MB）
 
 ### Windows
 1. 下载 [Windows 安装包](https://github.com/joesun16/shecan-video-compressor/releases/latest)（.exe 文件）
 2. 双击运行安装程序
-3. 安装 [FFmpeg](https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip) 并添加到系统 PATH
+3. 首次运行会自动下载 FFmpeg（约 80MB）
 
 > 💡 如果没有正式发布版本，可以从 [Actions](https://github.com/joesun16/shecan-video-compressor/actions) 页面下载最新构建
 
