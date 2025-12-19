@@ -1,0 +1,59 @@
+name: Build Installers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: pip install PyQt6 pyinstaller
+    
+    - name: Build with PyInstaller
+      run: pyinstaller --name="SheCan视频压缩工具" --windowed --onedir --noconfirm --icon=icon.ico video_compressor.py
+    
+    - name: Build Installer
+      uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
+      with:
+        path: installer.iss
+    
+    - name: Upload Installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: Windows-Installer
+        path: installer_output/*.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: pip install PyQt6 pyinstaller
+    
+    - name: Build with PyInstaller
+      run: pyinstaller --name="SheCan视频压缩工具" --windowed --onedir --noconfirm --icon=icon.icns video_compressor.py
+    
+    - name: Create DMG
+      run: hdiutil create -volname "SheCan视频压缩工具" -srcfolder "dist/SheCan视频压缩工具.app" -ov -format UDZO "SheCan视频压缩工具.dmg"
+    
+    - name: Upload DMG
+      uses: actions/upload-artifact@v4
+      with:
+        name: macOS-DMG
+        path: "*.dmg"
