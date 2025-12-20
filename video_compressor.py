@@ -693,7 +693,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.files, self.worker, self.info_workers, self.available_encoders = [], None, [], []
         self.init_ui()
-        self.check_environment()
+        # Delay environment check to after window is shown
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self.check_environment)
     
     def init_ui(self):
         self.setWindowTitle(tr('app_title'))
@@ -876,14 +878,18 @@ class MainWindow(QMainWindow):
                 self.encoder_combo.setCurrentText(tr('apple_h264'))
             elif IS_WIN and tr('nvidia') in self.available_encoders:
                 self.encoder_combo.setCurrentText(tr('nvidia'))
+            self.start_btn.setEnabled(True)
         else:
             self.status_indicator.setText(tr('ffmpeg_missing'))
             self.status_indicator.setStyleSheet("font-size: 11px; color: #ff9500;")
             self.start_btn.setEnabled(False)
-            if FFmpegSetupDialog(self).exec() == QDialog.DialogCode.Accepted:
+            # Add default encoder option even without FFmpeg
+            self.encoder_combo.clear()
+            self.encoder_combo.addItems([tr('cpu_h264')])
+            # Show install dialog
+            dialog = FFmpegSetupDialog(self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.check_environment()
-            else:
-                QMessageBox.warning(self, tr('hint'), tr('no_ffmpeg_warning'))
     
     def browse_output(self):
         folder = QFileDialog.getExistingDirectory(self, tr('select_output'))
