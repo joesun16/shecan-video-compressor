@@ -9,8 +9,12 @@ A simple batch video compression tool for macOS and Windows.
 
 ### macOS
 1. 下载 [macOS 安装包](https://github.com/joesun16/shecan-video-compressor/releases/latest)（.dmg 文件）
-2. 双击打开，将应用拖到「应用程序」文件夹
-3. 首次运行会自动下载 FFmpeg（约 80MB）
+2. 双击打开 DMG 文件
+3. **将应用图标拖到右侧的 Applications 文件夹**（这一步很重要！）
+4. 关闭 DMG 窗口，从「启动台」或「应用程序」中打开应用
+5. 首次运行会自动下载 FFmpeg（约 80MB）
+
+> ⚠️ 如果直接从 DMG 中运行而不拖到应用程序，每次都需要重新挂载 DMG
 
 ### Windows
 1. 下载 [Windows 安装包](https://github.com/joesun16/shecan-video-compressor/releases/latest)（.exe 文件）

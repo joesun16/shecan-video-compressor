@@ -51,7 +51,14 @@ jobs:
       run: pyinstaller --name="SheCan视频压缩工具" --windowed --onedir --noconfirm --icon=icon.icns video_compressor.py
     
     - name: Create DMG
-      run: hdiutil create -volname "SheCan视频压缩工具" -srcfolder "dist/SheCan视频压缩工具.app" -ov -format UDZO "SheCan视频压缩工具_macOS.dmg"
+      run: |
+        # Create a folder for DMG contents
+        mkdir -p dmg_contents
+        cp -r "dist/SheCan视频压缩工具.app" dmg_contents/
+        ln -s /Applications dmg_contents/Applications
+        
+        # Create DMG with Applications shortcut
+        hdiutil create -volname "SheCan视频压缩工具" -srcfolder dmg_contents -ov -format UDZO "SheCan视频压缩工具_macOS.dmg"
     
     - name: Upload macOS DMG
       uses: actions/upload-artifact@v4
