@@ -308,10 +308,19 @@ def tr(key, *args):
     return text
 
 
-# FFmpeg URLs
+# FFmpeg URLs - 使用国内镜像优先
 FFMPEG_URLS = {
-    'Windows': 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
-    'Darwin': 'https://evermeet.cx/ffmpeg/getrelease/zip'
+    'Windows': [
+        'https://mirrors.tuna.tsinghua.edu.cn/github-release/BtbN/FFmpeg-Builds/LatestRelease/ffmpeg-master-latest-win64-gpl.zip',
+        'https://ghproxy.net/https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
+        'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
+    ],
+    'Darwin': [
+        'https://evermeet.cx/ffmpeg/getrelease/zip',
+    ]
+}
+FFPROBE_URLS = {
+    'Darwin': ['https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip']
 }
 
 def get_app_data_dir():
@@ -419,14 +428,14 @@ class FFmpegDownloader(QThread):
             self.progress.emit(0, tr('downloading'))
             app_dir = get_app_data_dir()
             os.makedirs(app_dir, exist_ok=True)
-            url = FFMPEG_URLS.get(platform.system())
-            if not url:
+            urls = FFMPEG_URLS.get(platform.system())
+            if not urls:
                 self.finished.emit(False, "Unsupported OS")
                 return
             
             if IS_MAC:
                 zip_path = os.path.join(app_dir, 'ffmpeg.zip')
-                self._download(url, zip_path)
+                self._download_with_fallback(urls, zip_path)
                 self.progress.emit(50, tr('extracting'))
                 ffmpeg_dir = os.path.join(app_dir, 'ffmpeg')
                 os.makedirs(ffmpeg_dir, exist_ok=True)
@@ -440,7 +449,7 @@ class FFmpegDownloader(QThread):
                             os.chmod(dst, 0o755)
                 self.progress.emit(60, tr('downloading'))
                 probe_zip = os.path.join(app_dir, 'ffprobe.zip')
-                self._download('https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip', probe_zip)
+                self._download_with_fallback(FFPROBE_URLS.get('Darwin', []), probe_zip)
                 self.progress.emit(80, tr('extracting'))
                 with zipfile.ZipFile(probe_zip, 'r') as zf:
                     for m in zf.namelist():
@@ -454,7 +463,7 @@ class FFmpegDownloader(QThread):
                 os.remove(probe_zip)
             else:
                 zip_path = os.path.join(app_dir, 'ffmpeg.zip')
-                self._download(url, zip_path)
+                self._download_with_fallback(urls, zip_path)
                 self.progress.emit(60, tr('extracting'))
                 with zipfile.ZipFile(zip_path, 'r') as zf:
                     zf.extractall(app_dir)
@@ -475,9 +484,21 @@ class FFmpegDownloader(QThread):
         except Exception as e:
             self.finished.emit(False, tr('download_failed', str(e)))
     
+    def _download_with_fallback(self, urls, path):
+        """尝试多个镜像源下载，直到成功"""
+        last_error = None
+        for url in urls:
+            try:
+                self._download(url, path)
+                return  # 下载成功
+            except Exception as e:
+                last_error = e
+                continue  # 尝试下一个镜像
+        raise last_error or Exception("No available download source")
+    
     def _download(self, url, path):
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=60) as r, open(path, 'wb') as f:
+        with urllib.request.urlopen(req, timeout=120) as r, open(path, 'wb') as f:
             f.write(r.read())
 
 
