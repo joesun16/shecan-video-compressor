@@ -1,8 +1,9 @@
-# SheCan 视频批量压缩工具
+# SheCan Video Compressor
 
-简单易用的视频批量压缩工具，支持 macOS 和 Windows。
+简单易用的视频批量压缩工具，支持 macOS 和 Windows。  
+A simple batch video compression tool for macOS and Windows.
 
-![SheCan Video Compressor](https://img.shields.io/badge/version-2.1-blue) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)
+![SheCan Video Compressor](https://img.shields.io/badge/version-2.3-blue) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey) ![Language](https://img.shields.io/badge/language-中文%20%7C%20English-green)
 
 ## 下载安装
 
