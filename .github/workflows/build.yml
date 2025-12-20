@@ -20,8 +20,16 @@ jobs:
     - name: Install dependencies
       run: pip install PyQt6 pyinstaller
     
+    - name: Download FFmpeg
+      run: |
+        Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile "ffmpeg.zip"
+        Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg_temp"
+        New-Item -ItemType Directory -Force -Path "ffmpeg"
+        Get-ChildItem -Path "ffmpeg_temp" -Directory | ForEach-Object { Copy-Item -Path "$($_.FullName)\bin\*" -Destination "ffmpeg" -Recurse }
+        Remove-Item -Recurse -Force "ffmpeg_temp", "ffmpeg.zip"
+    
     - name: Build with PyInstaller
-      run: pyinstaller --name="SheCan视频压缩工具" --windowed --onedir --noconfirm --icon=icon.ico video_compressor.py
+      run: pyinstaller --name="SheCan视频压缩工具" --windowed --onedir --noconfirm --icon=icon.ico --add-data "ffmpeg;ffmpeg" video_compressor.py
     
     - name: Build Installer
       uses: Minionguyjpro/Inno-Setup-Action@v1.2.4

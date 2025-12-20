@@ -334,18 +334,20 @@ def get_bundled_ffmpeg_path():
     return os.path.join(app_dir, 'ffmpeg', 'ffmpeg.exe' if IS_WIN else 'ffmpeg')
 
 def get_ffmpeg_path():
-    bundled = get_bundled_ffmpeg_path()
-    if os.path.exists(bundled):
-        return bundled
+    # Windows: 优先使用打包内置的 FFmpeg
     if IS_WIN and getattr(sys, 'frozen', False):
         ffmpeg = os.path.join(sys._MEIPASS, 'ffmpeg', 'ffmpeg.exe')
         if os.path.exists(ffmpeg):
             return ffmpeg
-    if IS_WIN:
-        return 'ffmpeg'
-    for p in [os.path.expanduser('~/bin/ffmpeg'), '/usr/local/bin/ffmpeg', '/opt/homebrew/bin/ffmpeg']:
-        if os.path.exists(p):
-            return p
+    # 其次使用用户下载的 FFmpeg
+    bundled = get_bundled_ffmpeg_path()
+    if os.path.exists(bundled):
+        return bundled
+    # macOS: 检查常见安装路径
+    if IS_MAC:
+        for p in ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', os.path.expanduser('~/bin/ffmpeg')]:
+            if os.path.exists(p):
+                return p
     return 'ffmpeg'
 
 def get_ffprobe_path():
