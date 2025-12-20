@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SheCan Video Compressor V2.3
+SheCan Video Compressor V2.4
 Cross-platform (macOS / Windows)
-Auto-download FFmpeg, Bilingual UI (Chinese/English)
+Auto-download FFmpeg, Bilingual UI with manual switch
 """
 
 import sys
@@ -15,40 +15,111 @@ import multiprocessing
 import urllib.request
 import zipfile
 import shutil
-import locale
+import json
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QComboBox, QProgressBar, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QLineEdit,
-    QAbstractItemView, QDialog, QMessageBox
+    QAbstractItemView, QDialog, QMessageBox, QMenu
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QLocale
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QLocale, QSettings
+from PyQt6.QtGui import QColor, QAction
 
 # System info
 IS_MAC = platform.system() == 'Darwin'
 IS_WIN = platform.system() == 'Windows'
 CPU_COUNT = multiprocessing.cpu_count()
 
-# Detect system language
-def get_system_language():
-    """Detect if system uses Chinese"""
-    try:
-        lang = QLocale.system().name()  # e.g., 'zh_CN', 'en_US'
-        if lang.startswith('zh'):
-            return 'zh'
-    except:
-        pass
-    try:
-        lang = locale.getdefaultlocale()[0] or ''
-        if lang.startswith('zh'):
-            return 'zh'
-    except:
-        pass
-    return 'en'
+# Language management
+class LanguageManager:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._init()
+        return cls._instance
+    
+    def _init(self):
+        self.current = 'zh'  # Default to Chinese
+        self._load_saved_language()
+    
+    def _get_config_path(self):
+        if IS_WIN:
+            base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+            return os.path.join(base, 'SheCan', 'VideoCompressor', 'config.json')
+        return os.path.expanduser('~/Library/Application Support/SheCan/VideoCompressor/config.json')
+    
+    def _load_saved_language(self):
+        """Load saved language or detect from system"""
+        config_path = self._get_config_path()
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    if 'language' in config:
+                        self.current = config['language']
+                        return
+        except:
+            pass
+        # Detect from system
+        self._detect_system_language()
+    
+    def _detect_system_language(self):
+        """Detect system language"""
+        try:
+            # macOS: check AppleLanguages
+            if IS_MAC:
+                result = subprocess.run(['defaults', 'read', '-g', 'AppleLanguages'],
+                                       capture_output=True, text=True, timeout=2)
+                if 'zh' in result.stdout.lower():
+                    self.current = 'zh'
+                    return
+        except:
+            pass
+        try:
+            # Try QLocale
+            locale_name = QLocale.system().name()
+            if locale_name.startswith('zh'):
+                self.current = 'zh'
+                return
+        except:
+            pass
+        try:
+            # Try system locale
+            import locale
+            lang = locale.getdefaultlocale()[0] or ''
+            if lang.startswith('zh'):
+                self.current = 'zh'
+                return
+        except:
+            pass
+        self.current = 'en'
+    
+    def save_language(self, lang):
+        """Save language preference"""
+        self.current = lang
+        config_path = self._get_config_path()
+        try:
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            config = {}
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+            config['language'] = lang
+            with open(config_path, 'w') as f:
+                json.dump(config, f)
+        except:
+            pass
+    
+    def get(self):
+        return self.current
 
-LANG = get_system_language()
+LM = LanguageManager()
+
+def get_lang():
+    return LM.get()
 
 # Translations
 TR = {
@@ -80,14 +151,12 @@ TR = {
         'waiting': '等待',
         'failed': '失败',
         'stopping': '正在停止...',
-        # Table headers
         'col_filename': '文件名',
         'col_duration': '时长',
         'col_size': '大小',
         'col_progress': '进度',
         'col_output': '压缩后',
         'col_status': '状态',
-        # Encoder names
         'cpu_h264': 'CPU H.264 (兼容性最好)',
         'cpu_h265': 'CPU H.265 (体积更小)',
         'apple_h264': 'Apple GPU H.264 (推荐)',
@@ -95,21 +164,18 @@ TR = {
         'nvidia': 'NVIDIA GPU (N卡加速)',
         'amd': 'AMD GPU (A卡加速)',
         'intel': 'Intel GPU (核显加速)',
-        # Encoder info
         'info_apple': '使用 Apple 硬件加速，速度快',
         'info_nvidia': '使用 NVIDIA GPU 加速',
         'info_amd': '使用 AMD GPU 加速',
         'info_intel': '使用 Intel 核显加速',
         'info_h265': 'H.265 编码，体积更小但兼容性稍差',
         'info_cpu': 'CPU 编码，兼容性最好',
-        # Quality/Speed
         'high_quality': '高质量',
         'balanced': '平衡',
         'small_size': '小体积',
         'fast': '快速',
         'high_compress': '高压缩',
         'keep_original': '保持原始',
-        # FFmpeg
         'ffmpeg_ready': '● FFmpeg 就绪',
         'ffmpeg_missing': '● FFmpeg 未安装',
         'install_ffmpeg': '安装 FFmpeg',
@@ -123,7 +189,6 @@ TR = {
         'install_success': 'FFmpeg 安装成功',
         'install_failed': 'FFmpeg 安装失败，请手动安装',
         'no_ffmpeg_warning': '未安装 FFmpeg，无法使用压缩功能',
-        # Result dialog
         'compress_done': '压缩完成',
         'files_processed': '成功处理:',
         'original_size': '原始大小:',
@@ -132,7 +197,6 @@ TR = {
         'size_increased': '体积增加:',
         'ok': '确定',
         'files_unit': '{0}/{1} 个文件',
-        # Dialogs
         'hint': '提示',
         'error': '错误',
         'add_files_first': '请先添加视频文件',
@@ -142,6 +206,10 @@ TR = {
         'video_files': '视频文件',
         'all_files': '所有文件',
         'cannot_create_dir': '无法创建输出目录: {0}',
+        'language': '语言',
+        'chinese': '中文',
+        'english': 'English',
+        'restart_hint': '语言切换将在重启后生效',
     },
     'en': {
         'app_title': 'SheCan Video Compressor',
@@ -226,15 +294,19 @@ TR = {
         'video_files': 'Video Files',
         'all_files': 'All Files',
         'cannot_create_dir': 'Cannot create output directory: {0}',
+        'language': 'Language',
+        'chinese': '中文',
+        'english': 'English',
+        'restart_hint': 'Language change will take effect after restart',
     }
 }
 
 def tr(key, *args):
-    """Get translated string"""
-    text = TR.get(LANG, TR['en']).get(key, key)
+    text = TR.get(get_lang(), TR['zh']).get(key, key)
     if args:
         return text.format(*args)
     return text
+
 
 # FFmpeg URLs
 FFMPEG_URLS = {
@@ -280,8 +352,7 @@ def is_ffmpeg_available():
     except:
         return False
 
-
-# Encoder configurations
+# Encoder configurations - must be called after tr() is available
 def get_encoders_config():
     encoders = {
         tr('cpu_h264'): {
@@ -324,16 +395,14 @@ def get_encoders_config():
         }
     return encoders
 
-ENCODERS = get_encoders_config()
-
-def detect_available_encoders():
+def detect_available_encoders(encoders):
     available = []
     try:
         kwargs = {'capture_output': True, 'text': True, 'timeout': 10}
         if IS_WIN:
             kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
         output = subprocess.run([get_ffmpeg_path(), '-hide_banner', '-encoders'], **kwargs).stdout
-        for name, cfg in ENCODERS.items():
+        for name, cfg in encoders.items():
             if cfg['encoder'] in output:
                 available.append(name)
     except:
@@ -562,15 +631,15 @@ class CompressionWorker(QThread):
     all_done = pyqtSignal(int, int, int, int)
     error = pyqtSignal(str)
     
-    def __init__(self, files, settings):
+    def __init__(self, files, settings, encoders):
         super().__init__()
-        self.files, self.settings = files, settings
+        self.files, self.settings, self.encoders = files, settings, encoders
         self.should_stop = False
         self.process = None
 
     def run(self):
         total, completed, total_in, total_out = len(self.files), 0, 0, 0
-        enc_cfg = ENCODERS.get(self.settings['encoder_name'], list(ENCODERS.values())[0])
+        enc_cfg = self.encoders.get(self.settings['encoder_name'], list(self.encoders.values())[0])
         threads = max(2, CPU_COUNT // 2)
         ffmpeg = get_ffmpeg_path()
         
@@ -691,9 +760,9 @@ class DropArea(QFrame):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.files, self.worker, self.info_workers, self.available_encoders = [], None, [], []
+        self.files, self.worker, self.info_workers = [], None, []
+        self.encoders = get_encoders_config()
         self.init_ui()
-        # Delay environment check to after window is shown
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(100, self.check_environment)
     
@@ -714,6 +783,18 @@ class MainWindow(QMainWindow):
             QProgressBar { border: none; border-radius: 3px; background: #e0e0e0; height: 6px; }
             QProgressBar::chunk { background: #007AFF; border-radius: 3px; }
         """)
+        
+        # Menu bar with language switch
+        menubar = self.menuBar()
+        settings_menu = menubar.addMenu(tr('language'))
+        
+        zh_action = QAction(tr('chinese'), self)
+        zh_action.triggered.connect(lambda: self.switch_language('zh'))
+        settings_menu.addAction(zh_action)
+        
+        en_action = QAction(tr('english'), self)
+        en_action.triggered.connect(lambda: self.switch_language('en'))
+        settings_menu.addAction(en_action)
         
         central = QWidget()
         self.setCentralWidget(central)
@@ -860,33 +941,35 @@ class MainWindow(QMainWindow):
         bottom.addWidget(self.start_btn)
         layout.addLayout(bottom)
     
+    def switch_language(self, lang):
+        LM.save_language(lang)
+        QMessageBox.information(self, tr('hint'), tr('restart_hint'))
+    
     def on_encoder_changed(self, name):
-        if name in ENCODERS:
-            enc = ENCODERS[name]['encoder']
+        if name in self.encoders:
+            enc = self.encoders[name]['encoder']
             info_map = {'videotoolbox': tr('info_apple'), 'nvenc': tr('info_nvidia'), 'amf': tr('info_amd'), 'qsv': tr('info_intel'), 'libx265': tr('info_h265')}
             self.encoder_info.setText(next((v for k, v in info_map.items() if k in enc), tr('info_cpu')))
-            self.speed_combo.setEnabled(ENCODERS[name].get('has_preset', False))
+            self.speed_combo.setEnabled(self.encoders[name].get('has_preset', False))
     
     def check_environment(self):
         if is_ffmpeg_available():
             self.status_indicator.setText(tr('ffmpeg_ready'))
             self.status_indicator.setStyleSheet("font-size: 11px; color: #34c759;")
-            self.available_encoders = detect_available_encoders()
+            available = detect_available_encoders(self.encoders)
             self.encoder_combo.clear()
-            self.encoder_combo.addItems(self.available_encoders)
-            if IS_MAC and tr('apple_h264') in self.available_encoders:
+            self.encoder_combo.addItems(available)
+            if IS_MAC and tr('apple_h264') in available:
                 self.encoder_combo.setCurrentText(tr('apple_h264'))
-            elif IS_WIN and tr('nvidia') in self.available_encoders:
+            elif IS_WIN and tr('nvidia') in available:
                 self.encoder_combo.setCurrentText(tr('nvidia'))
             self.start_btn.setEnabled(True)
         else:
             self.status_indicator.setText(tr('ffmpeg_missing'))
             self.status_indicator.setStyleSheet("font-size: 11px; color: #ff9500;")
             self.start_btn.setEnabled(False)
-            # Add default encoder option even without FFmpeg
             self.encoder_combo.clear()
             self.encoder_combo.addItems([tr('cpu_h264')])
-            # Show install dialog
             dialog = FFmpegSetupDialog(self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.check_environment()
@@ -974,7 +1057,7 @@ class MainWindow(QMainWindow):
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         for c in [self.encoder_combo, self.quality_combo, self.speed_combo, self.resolution_combo]: c.setEnabled(False)
-        self.worker = CompressionWorker(self.files.copy(), settings)
+        self.worker = CompressionWorker(self.files.copy(), settings, self.encoders)
         self.worker.progress.connect(self._on_progress)
         self.worker.file_done.connect(self._on_file_done)
         self.worker.all_done.connect(self._on_all_done)
@@ -1014,8 +1097,8 @@ class MainWindow(QMainWindow):
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         for c in [self.encoder_combo, self.quality_combo, self.resolution_combo]: c.setEnabled(True)
-        if self.encoder_combo.currentText() in ENCODERS:
-            self.speed_combo.setEnabled(ENCODERS[self.encoder_combo.currentText()].get('has_preset', False))
+        if self.encoder_combo.currentText() in self.encoders:
+            self.speed_combo.setEnabled(self.encoders[self.encoder_combo.currentText()].get('has_preset', False))
         if completed: ResultDialog(self, completed, total, in_size, out_size).exec()
 
 
@@ -1024,7 +1107,8 @@ def main():
     app.setStyle('Fusion')
     app.setApplicationName(tr('app_title'))
     app.setOrganizationName("SheCan")
-    MainWindow().show()
+    window = MainWindow()
+    window.show()
     sys.exit(app.exec())
 
 if __name__ == '__main__':
