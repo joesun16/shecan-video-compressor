@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SheCan Video Compressor V2.4
+SheCan Video Compressor V2.5
 Cross-platform (macOS / Windows)
-Auto-download FFmpeg, Bilingual UI with manual switch
+FFmpeg bundled, Bilingual UI
 """
 
 import sys
@@ -12,18 +12,15 @@ import subprocess
 import re
 import platform
 import multiprocessing
-import urllib.request
-import zipfile
-import shutil
 import json
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QComboBox, QProgressBar, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QLineEdit,
-    QAbstractItemView, QDialog, QMessageBox, QMenu
+    QAbstractItemView, QDialog, QMessageBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QLocale, QSettings
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QLocale
 from PyQt6.QtGui import QColor, QAction
 
 # System info
@@ -42,7 +39,7 @@ class LanguageManager:
         return cls._instance
     
     def _init(self):
-        self.current = 'zh'  # Default to Chinese
+        self.current = 'zh'
         self._load_saved_language()
     
     def _get_config_path(self):
@@ -52,7 +49,6 @@ class LanguageManager:
         return os.path.expanduser('~/Library/Application Support/SheCan/VideoCompressor/config.json')
     
     def _load_saved_language(self):
-        """Load saved language or detect from system"""
         config_path = self._get_config_path()
         try:
             if os.path.exists(config_path):
@@ -63,13 +59,10 @@ class LanguageManager:
                         return
         except:
             pass
-        # Detect from system
         self._detect_system_language()
     
     def _detect_system_language(self):
-        """Detect system language"""
         try:
-            # macOS: check AppleLanguages
             if IS_MAC:
                 result = subprocess.run(['defaults', 'read', '-g', 'AppleLanguages'],
                                        capture_output=True, text=True, timeout=2)
@@ -79,18 +72,8 @@ class LanguageManager:
         except:
             pass
         try:
-            # Try QLocale
             locale_name = QLocale.system().name()
             if locale_name.startswith('zh'):
-                self.current = 'zh'
-                return
-        except:
-            pass
-        try:
-            # Try system locale
-            import locale
-            lang = locale.getdefaultlocale()[0] or ''
-            if lang.startswith('zh'):
                 self.current = 'zh'
                 return
         except:
@@ -98,7 +81,6 @@ class LanguageManager:
         self.current = 'en'
     
     def save_language(self, lang):
-        """Save language preference"""
         self.current = lang
         config_path = self._get_config_path()
         try:
@@ -117,7 +99,6 @@ class LanguageManager:
         return self.current
 
 LM = LanguageManager()
-
 def get_lang():
     return LM.get()
 
@@ -176,19 +157,6 @@ TR = {
         'fast': '快速',
         'high_compress': '高压缩',
         'keep_original': '保持原始',
-        'ffmpeg_ready': '● FFmpeg 就绪',
-        'ffmpeg_missing': '● FFmpeg 未安装',
-        'install_ffmpeg': '安装 FFmpeg',
-        'need_ffmpeg': '需要安装 FFmpeg',
-        'ffmpeg_desc': 'FFmpeg 是视频压缩的核心组件\n点击下方按钮自动下载安装（约 80MB）',
-        'auto_install': '自动安装',
-        'cancel': '取消',
-        'downloading': '正在下载 FFmpeg...',
-        'extracting': '正在解压...',
-        'download_failed': '下载失败: {0}',
-        'install_success': 'FFmpeg 安装成功',
-        'install_failed': 'FFmpeg 安装失败，请手动安装',
-        'no_ffmpeg_warning': '未安装 FFmpeg，无法使用压缩功能',
         'compress_done': '压缩完成',
         'files_processed': '成功处理:',
         'original_size': '原始大小:',
@@ -264,19 +232,6 @@ TR = {
         'fast': 'Fast',
         'high_compress': 'High Compress',
         'keep_original': 'Original',
-        'ffmpeg_ready': '● FFmpeg Ready',
-        'ffmpeg_missing': '● FFmpeg Missing',
-        'install_ffmpeg': 'Install FFmpeg',
-        'need_ffmpeg': 'FFmpeg Required',
-        'ffmpeg_desc': 'FFmpeg is required for video compression\nClick below to auto-download (~80MB)',
-        'auto_install': 'Auto Install',
-        'cancel': 'Cancel',
-        'downloading': 'Downloading FFmpeg...',
-        'extracting': 'Extracting...',
-        'download_failed': 'Download failed: {0}',
-        'install_success': 'FFmpeg installed successfully',
-        'install_failed': 'FFmpeg installation failed',
-        'no_ffmpeg_warning': 'FFmpeg not installed, compression unavailable',
         'compress_done': 'Compression Complete',
         'files_processed': 'Processed:',
         'original_size': 'Original:',
@@ -308,62 +263,25 @@ def tr(key, *args):
     return text
 
 
-# FFmpeg URLs - 使用国内镜像优先
-FFMPEG_URLS = {
-    'Windows': [
-        'https://mirrors.tuna.tsinghua.edu.cn/github-release/BtbN/FFmpeg-Builds/LatestRelease/ffmpeg-master-latest-win64-gpl.zip',
-        'https://ghproxy.net/https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
-        'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
-    ],
-    'Darwin': [
-        'https://evermeet.cx/ffmpeg/getrelease/zip',
-    ]
-}
-FFPROBE_URLS = {
-    'Darwin': ['https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip']
-}
-
-def get_app_data_dir():
-    if IS_WIN:
-        base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
-        return os.path.join(base, 'SheCan', 'VideoCompressor')
-    return os.path.expanduser('~/Library/Application Support/SheCan/VideoCompressor')
-
-def get_bundled_ffmpeg_path():
-    app_dir = get_app_data_dir()
-    return os.path.join(app_dir, 'ffmpeg', 'ffmpeg.exe' if IS_WIN else 'ffmpeg')
-
 def get_ffmpeg_path():
-    # Windows: 优先使用打包内置的 FFmpeg
-    if IS_WIN and getattr(sys, 'frozen', False):
-        ffmpeg = os.path.join(sys._MEIPASS, 'ffmpeg', 'ffmpeg.exe')
-        if os.path.exists(ffmpeg):
-            return ffmpeg
-    # 其次使用用户下载的 FFmpeg
-    bundled = get_bundled_ffmpeg_path()
-    if os.path.exists(bundled):
-        return bundled
-    # macOS: 检查常见安装路径
-    if IS_MAC:
-        for p in ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', os.path.expanduser('~/bin/ffmpeg')]:
-            if os.path.exists(p):
-                return p
+    """Get bundled FFmpeg path"""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled app
+        if IS_WIN:
+            return os.path.join(sys._MEIPASS, 'ffmpeg', 'ffmpeg.exe')
+        else:
+            # macOS: FFmpeg in Resources folder
+            base = os.path.dirname(os.path.dirname(os.path.dirname(sys.executable)))
+            return os.path.join(base, 'Resources', 'ffmpeg', 'ffmpeg')
+    # Development mode
     return 'ffmpeg'
 
 def get_ffprobe_path():
     ffmpeg = get_ffmpeg_path()
     return ffmpeg.replace('ffmpeg.exe', 'ffprobe.exe') if IS_WIN else ffmpeg.replace('ffmpeg', 'ffprobe')
 
-def is_ffmpeg_available():
-    try:
-        kwargs = {'capture_output': True, 'timeout': 5}
-        if IS_WIN:
-            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-        return subprocess.run([get_ffmpeg_path(), '-version'], **kwargs).returncode == 0
-    except:
-        return False
 
-# Encoder configurations - must be called after tr() is available
+# Encoder configurations
 def get_encoders_config():
     encoders = {
         tr('cpu_h264'): {
@@ -419,158 +337,6 @@ def detect_available_encoders(encoders):
     except:
         pass
     return available or [tr('cpu_h264')]
-
-
-class FFmpegDownloader(QThread):
-    progress = pyqtSignal(int, str)
-    finished = pyqtSignal(bool, str)
-    
-    def run(self):
-        try:
-            self.progress.emit(0, tr('downloading'))
-            app_dir = get_app_data_dir()
-            os.makedirs(app_dir, exist_ok=True)
-            urls = FFMPEG_URLS.get(platform.system())
-            if not urls:
-                self.finished.emit(False, "Unsupported OS")
-                return
-            
-            if IS_MAC:
-                zip_path = os.path.join(app_dir, 'ffmpeg.zip')
-                self._download_with_fallback(urls, zip_path)
-                self.progress.emit(50, tr('extracting'))
-                ffmpeg_dir = os.path.join(app_dir, 'ffmpeg')
-                os.makedirs(ffmpeg_dir, exist_ok=True)
-                with zipfile.ZipFile(zip_path, 'r') as zf:
-                    for m in zf.namelist():
-                        if 'ffmpeg' in m.lower():
-                            zf.extract(m, ffmpeg_dir)
-                            src = os.path.join(ffmpeg_dir, m)
-                            dst = os.path.join(ffmpeg_dir, 'ffmpeg')
-                            if src != dst: shutil.move(src, dst)
-                            os.chmod(dst, 0o755)
-                self.progress.emit(60, tr('downloading'))
-                probe_zip = os.path.join(app_dir, 'ffprobe.zip')
-                self._download_with_fallback(FFPROBE_URLS.get('Darwin', []), probe_zip)
-                self.progress.emit(80, tr('extracting'))
-                with zipfile.ZipFile(probe_zip, 'r') as zf:
-                    for m in zf.namelist():
-                        if 'ffprobe' in m.lower():
-                            zf.extract(m, ffmpeg_dir)
-                            src = os.path.join(ffmpeg_dir, m)
-                            dst = os.path.join(ffmpeg_dir, 'ffprobe')
-                            if src != dst: shutil.move(src, dst)
-                            os.chmod(dst, 0o755)
-                os.remove(zip_path)
-                os.remove(probe_zip)
-            else:
-                zip_path = os.path.join(app_dir, 'ffmpeg.zip')
-                self._download_with_fallback(urls, zip_path)
-                self.progress.emit(60, tr('extracting'))
-                with zipfile.ZipFile(zip_path, 'r') as zf:
-                    zf.extractall(app_dir)
-                for item in os.listdir(app_dir):
-                    item_path = os.path.join(app_dir, item)
-                    if os.path.isdir(item_path) and 'ffmpeg' in item.lower():
-                        bin_dir = os.path.join(item_path, 'bin')
-                        if os.path.exists(bin_dir):
-                            target = os.path.join(app_dir, 'ffmpeg')
-                            if os.path.exists(target): shutil.rmtree(target)
-                            shutil.move(bin_dir, target)
-                            shutil.rmtree(item_path)
-                            break
-                os.remove(zip_path)
-            
-            self.progress.emit(100, "Done")
-            self.finished.emit(is_ffmpeg_available(), tr('install_success') if is_ffmpeg_available() else tr('install_failed'))
-        except Exception as e:
-            self.finished.emit(False, tr('download_failed', str(e)))
-    
-    def _download_with_fallback(self, urls, path):
-        """尝试多个镜像源下载，直到成功"""
-        last_error = None
-        for url in urls:
-            try:
-                self._download(url, path)
-                return  # 下载成功
-            except Exception as e:
-                last_error = e
-                continue  # 尝试下一个镜像
-        raise last_error or Exception("No available download source")
-    
-    def _download(self, url, path):
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=120) as r, open(path, 'wb') as f:
-            f.write(r.read())
-
-
-class FFmpegSetupDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(tr('install_ffmpeg'))
-        self.setFixedSize(400, 200)
-        self.setStyleSheet("QDialog { background: white; }")
-        self.downloader = None
-        
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(16)
-        
-        title = QLabel(tr('need_ffmpeg'))
-        title.setStyleSheet("font-size: 16px; font-weight: 600; color: #1d1d1f;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
-        
-        desc = QLabel(tr('ffmpeg_desc'))
-        desc.setStyleSheet("font-size: 13px; color: #666;")
-        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(desc)
-        
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.progress.setVisible(False)
-        self.progress.setStyleSheet("QProgressBar { border: none; border-radius: 4px; background: #e0e0e0; height: 8px; } QProgressBar::chunk { background: #007AFF; border-radius: 4px; }")
-        layout.addWidget(self.progress)
-        
-        self.status_label = QLabel("")
-        self.status_label.setStyleSheet("font-size: 12px; color: #666;")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.status_label)
-        
-        layout.addStretch()
-        
-        btn_row = QHBoxLayout()
-        self.cancel_btn = QPushButton(tr('cancel'))
-        self.cancel_btn.setFixedSize(100, 32)
-        self.cancel_btn.setStyleSheet("QPushButton { background: #f0f0f0; border: none; border-radius: 6px; color: #333; font-size: 13px; } QPushButton:hover { background: #e0e0e0; }")
-        self.cancel_btn.clicked.connect(self.reject)
-        btn_row.addWidget(self.cancel_btn)
-        btn_row.addStretch()
-        
-        self.install_btn = QPushButton(tr('auto_install'))
-        self.install_btn.setFixedSize(100, 32)
-        self.install_btn.setStyleSheet("QPushButton { background: #007AFF; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; } QPushButton:hover { background: #0066d6; } QPushButton:disabled { background: #ccc; }")
-        self.install_btn.clicked.connect(self.start_download)
-        btn_row.addWidget(self.install_btn)
-        layout.addLayout(btn_row)
-    
-    def start_download(self):
-        self.install_btn.setEnabled(False)
-        self.cancel_btn.setEnabled(False)
-        self.progress.setVisible(True)
-        self.downloader = FFmpegDownloader()
-        self.downloader.progress.connect(lambda p, s: (self.progress.setValue(p), self.status_label.setText(s)))
-        self.downloader.finished.connect(self.on_finished)
-        self.downloader.start()
-    
-    def on_finished(self, success, message):
-        if success:
-            self.accept()
-        else:
-            self.status_label.setText(message)
-            self.status_label.setStyleSheet("font-size: 12px; color: #ff3b30;")
-            self.install_btn.setEnabled(True)
-            self.cancel_btn.setEnabled(True)
 
 
 class ResultDialog(QDialog):
@@ -786,8 +552,6 @@ class MainWindow(QMainWindow):
         self.files, self.worker, self.info_workers = [], None, []
         self.encoders = get_encoders_config()
         self.init_ui()
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(100, self.check_environment)
     
     def init_ui(self):
         self.setWindowTitle(tr('app_title'))
@@ -810,11 +574,9 @@ class MainWindow(QMainWindow):
         # Menu bar with language switch
         menubar = self.menuBar()
         settings_menu = menubar.addMenu(tr('language'))
-        
         zh_action = QAction(tr('chinese'), self)
         zh_action.triggered.connect(lambda: self.switch_language('zh'))
         settings_menu.addAction(zh_action)
-        
         en_action = QAction(tr('english'), self)
         en_action.triggered.connect(lambda: self.switch_language('en'))
         settings_menu.addAction(en_action)
@@ -831,9 +593,6 @@ class MainWindow(QMainWindow):
         title.setStyleSheet("font-size: 18px; font-weight: 600; color: #1d1d1f;")
         title_row.addWidget(title)
         title_row.addStretch()
-        self.status_indicator = QLabel()
-        self.status_indicator.setStyleSheet("font-size: 11px;")
-        title_row.addWidget(self.status_indicator)
         layout.addLayout(title_row)
         
         # Encoder
@@ -963,6 +722,19 @@ class MainWindow(QMainWindow):
         self.start_btn.clicked.connect(self.start_compression)
         bottom.addWidget(self.start_btn)
         layout.addLayout(bottom)
+        
+        # Initialize encoders
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self.init_encoders)
+    
+    def init_encoders(self):
+        available = detect_available_encoders(self.encoders)
+        self.encoder_combo.clear()
+        self.encoder_combo.addItems(available)
+        if IS_MAC and tr('apple_h264') in available:
+            self.encoder_combo.setCurrentText(tr('apple_h264'))
+        elif IS_WIN and tr('nvidia') in available:
+            self.encoder_combo.setCurrentText(tr('nvidia'))
     
     def switch_language(self, lang):
         LM.save_language(lang)
@@ -974,28 +746,6 @@ class MainWindow(QMainWindow):
             info_map = {'videotoolbox': tr('info_apple'), 'nvenc': tr('info_nvidia'), 'amf': tr('info_amd'), 'qsv': tr('info_intel'), 'libx265': tr('info_h265')}
             self.encoder_info.setText(next((v for k, v in info_map.items() if k in enc), tr('info_cpu')))
             self.speed_combo.setEnabled(self.encoders[name].get('has_preset', False))
-    
-    def check_environment(self):
-        if is_ffmpeg_available():
-            self.status_indicator.setText(tr('ffmpeg_ready'))
-            self.status_indicator.setStyleSheet("font-size: 11px; color: #34c759;")
-            available = detect_available_encoders(self.encoders)
-            self.encoder_combo.clear()
-            self.encoder_combo.addItems(available)
-            if IS_MAC and tr('apple_h264') in available:
-                self.encoder_combo.setCurrentText(tr('apple_h264'))
-            elif IS_WIN and tr('nvidia') in available:
-                self.encoder_combo.setCurrentText(tr('nvidia'))
-            self.start_btn.setEnabled(True)
-        else:
-            self.status_indicator.setText(tr('ffmpeg_missing'))
-            self.status_indicator.setStyleSheet("font-size: 11px; color: #ff9500;")
-            self.start_btn.setEnabled(False)
-            self.encoder_combo.clear()
-            self.encoder_combo.addItems([tr('cpu_h264')])
-            dialog = FFmpegSetupDialog(self)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                self.check_environment()
     
     def browse_output(self):
         folder = QFileDialog.getExistingDirectory(self, tr('select_output'))

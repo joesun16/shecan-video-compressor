@@ -56,9 +56,20 @@ jobs:
       run: |
         pip install PyQt6 py2app
     
+    - name: Download FFmpeg
+      run: |
+        mkdir -p ffmpeg
+        curl -L "https://evermeet.cx/ffmpeg/getrelease/zip" -o ffmpeg.zip
+        unzip ffmpeg.zip -d ffmpeg/
+        curl -L "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip" -o ffprobe.zip
+        unzip ffprobe.zip -d ffmpeg/
+        chmod +x ffmpeg/ffmpeg ffmpeg/ffprobe
+        rm -f ffmpeg.zip ffprobe.zip
+    
     - name: Build with py2app
       run: |
         python setup.py py2app
+        cp -r ffmpeg "dist/SheCan视频压缩工具.app/Contents/Resources/"
     
     - name: Create DMG
       run: |
