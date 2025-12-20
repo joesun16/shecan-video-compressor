@@ -46,20 +46,11 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install PyQt6 pyinstaller
-        # Install universal2 version for better compatibility
-        pip install --upgrade pyinstaller
+        pip install PyQt6 py2app
     
-    - name: Build with PyInstaller
+    - name: Build with py2app
       run: |
-        pyinstaller --name="SheCan视频压缩工具" \
-          --windowed \
-          --onedir \
-          --noconfirm \
-          --icon=icon.icns \
-          --target-arch=universal2 \
-          --codesign-identity=- \
-          video_compressor.py
+        python setup.py py2app
     
     - name: Create DMG
       run: |
