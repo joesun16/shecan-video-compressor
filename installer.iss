@@ -2,7 +2,7 @@
 
 [Setup]
 AppName=SheCan视频压缩工具
-AppVersion=2.8
+AppVersion=2.9
 AppPublisher=SheCan
 DefaultDirName={autopf}\SheCan视频压缩工具
 DefaultGroupName=SheCan视频压缩工具

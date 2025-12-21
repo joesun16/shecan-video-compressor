@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SheCan 视频批量压缩工具 V2.8
+SheCan 视频批量压缩工具 V2.9
 跨平台支持 (macOS / Windows)
 FFmpeg 内置，双语界面
 """
@@ -271,20 +271,29 @@ def tr(key):
 # ============ FFmpeg 路径 ============
 def get_ffmpeg_path():
     """获取 FFmpeg 路径 - 优先使用内置版本"""
-    if getattr(sys, 'frozen', False):
-        # 打包后的应用
-        if IS_WIN:
-            # Windows: PyInstaller 打包，FFmpeg 在 _MEIPASS/ffmpeg/
-            bundled = os.path.join(sys._MEIPASS, 'ffmpeg', 'ffmpeg.exe')
-            if os.path.exists(bundled):
-                return bundled
+    # macOS: 检查是否在 .app 包内运行
+    if IS_MAC:
+        # 获取可执行文件路径
+        if getattr(sys, 'frozen', False):
+            exe_path = sys.executable
         else:
-            # macOS: py2app 打包，FFmpeg 在 Contents/Resources/ffmpeg/
-            exe_dir = os.path.dirname(sys.executable)  # Contents/MacOS
-            contents_dir = os.path.dirname(exe_dir)     # Contents
-            bundled = os.path.join(contents_dir, 'Resources', 'ffmpeg', 'ffmpeg')
-            if os.path.exists(bundled):
-                return bundled
+            exe_path = os.path.abspath(sys.argv[0] if sys.argv[0] else __file__)
+        
+        # 检查是否在 .app/Contents/MacOS/ 或 .app/Contents/Resources/ 内
+        if '.app/Contents/' in exe_path:
+            # 找到 Contents 目录
+            parts = exe_path.split('.app/Contents/')
+            if len(parts) >= 2:
+                contents_dir = parts[0] + '.app/Contents'
+                bundled = os.path.join(contents_dir, 'Resources', 'ffmpeg', 'ffmpeg')
+                if os.path.exists(bundled):
+                    return bundled
+    
+    # Windows: PyInstaller 打包
+    if IS_WIN and getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        bundled = os.path.join(sys._MEIPASS, 'ffmpeg', 'ffmpeg.exe')
+        if os.path.exists(bundled):
+            return bundled
     
     # 开发模式或内置版本不存在时，查找系统 FFmpeg
     if IS_WIN:
