@@ -268,11 +268,14 @@ def get_ffmpeg_path():
     if getattr(sys, 'frozen', False):
         # Running as compiled app
         if IS_WIN:
+            # PyInstaller on Windows
             return os.path.join(sys._MEIPASS, 'ffmpeg', 'ffmpeg.exe')
         else:
-            # macOS: FFmpeg in Resources folder
-            base = os.path.dirname(os.path.dirname(os.path.dirname(sys.executable)))
-            return os.path.join(base, 'Resources', 'ffmpeg', 'ffmpeg')
+            # py2app on macOS: sys.executable is in Contents/MacOS/
+            # FFmpeg is in Contents/Resources/ffmpeg/
+            exe_dir = os.path.dirname(sys.executable)  # Contents/MacOS
+            contents_dir = os.path.dirname(exe_dir)     # Contents
+            return os.path.join(contents_dir, 'Resources', 'ffmpeg', 'ffmpeg')
     # Development mode
     return 'ffmpeg'
 
