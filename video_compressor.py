@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SheCan Video Compressor V2.5
-Cross-platform (macOS / Windows)
-FFmpeg bundled, Bilingual UI
+SheCan 视频批量压缩工具 V2.8
+跨平台支持 (macOS / Windows)
+FFmpeg 内置，双语界面
 """
 
 import sys
@@ -23,12 +23,13 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QLocale
 from PyQt6.QtGui import QColor, QAction
 
-# System info
+# 系统信息
 IS_MAC = platform.system() == 'Darwin'
 IS_WIN = platform.system() == 'Windows'
 CPU_COUNT = multiprocessing.cpu_count()
 
-# Language management
+
+# ============ 语言管理 ============
 class LanguageManager:
     _instance = None
     
@@ -47,7 +48,7 @@ class LanguageManager:
             base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
             return os.path.join(base, 'SheCan', 'VideoCompressor', 'config.json')
         return os.path.expanduser('~/Library/Application Support/SheCan/VideoCompressor/config.json')
-    
+
     def _load_saved_language(self):
         config_path = self._get_config_path()
         try:
@@ -98,250 +99,314 @@ class LanguageManager:
     def get(self):
         return self.current
 
+
 LM = LanguageManager()
+
 def get_lang():
     return LM.get()
 
-# Translations
-TR = {
-    'zh': {
-        'app_title': 'SheCan 视频压缩工具',
-        'batch_compress': '视频批量压缩',
-        'encoder_mode': '编码模式',
-        'quality': '质量',
-        'speed': '速度',
-        'resolution': '分辨率',
-        'output_dir': '输出目录',
-        'output_placeholder': '默认保存到原文件所在目录',
-        'select': '选择',
-        'clear': '清除',
-        'drop_hint': '拖放视频文件到这里，或点击选择',
-        'format_hint': '支持 MP4、MKV、AVI、MOV 等格式',
-        'add_files': '添加文件',
-        'add_folder': '添加文件夹',
-        'remove_selected': '移除选中',
-        'clear_list': '清空列表',
-        'file_count': '共 {0} 个文件，{1}',
-        'start': '开始压缩',
-        'stop': '停止',
-        'ready': '就绪',
-        'preparing': '准备中...',
-        'processing': '处理中 {0}/{1}',
-        'done': '完成 {0}/{1}',
-        'compressing': '压缩中',
-        'waiting': '等待',
-        'failed': '失败',
-        'stopping': '正在停止...',
-        'col_filename': '文件名',
-        'col_duration': '时长',
-        'col_size': '大小',
-        'col_progress': '进度',
-        'col_output': '压缩后',
-        'col_status': '状态',
-        'cpu_h264': 'CPU H.264 (兼容性最好)',
-        'cpu_h265': 'CPU H.265 (体积更小)',
-        'apple_h264': 'Apple GPU H.264 (推荐)',
-        'apple_h265': 'Apple GPU H.265',
-        'nvidia': 'NVIDIA GPU (N卡加速)',
-        'amd': 'AMD GPU (A卡加速)',
-        'intel': 'Intel GPU (核显加速)',
-        'info_apple': '使用 Apple 硬件加速，速度快',
-        'info_nvidia': '使用 NVIDIA GPU 加速',
-        'info_amd': '使用 AMD GPU 加速',
-        'info_intel': '使用 Intel 核显加速',
-        'info_h265': 'H.265 编码，体积更小但兼容性稍差',
-        'info_cpu': 'CPU 编码，兼容性最好',
-        'high_quality': '高质量',
-        'balanced': '平衡',
-        'small_size': '小体积',
-        'fast': '快速',
-        'high_compress': '高压缩',
-        'keep_original': '保持原始',
-        'compress_done': '压缩完成',
-        'files_processed': '成功处理:',
-        'original_size': '原始大小:',
-        'compressed_size': '压缩后:',
-        'space_saved': '节省空间:',
-        'size_increased': '体积增加:',
-        'ok': '确定',
-        'files_unit': '{0}/{1} 个文件',
-        'hint': '提示',
-        'error': '错误',
-        'add_files_first': '请先添加视频文件',
-        'select_output': '选择输出目录',
-        'select_video': '选择视频文件',
-        'select_folder': '选择文件夹',
-        'video_files': '视频文件',
-        'all_files': '所有文件',
-        'cannot_create_dir': '无法创建输出目录: {0}',
-        'language': '语言',
-        'chinese': '中文',
-        'english': 'English',
-        'restart_hint': '语言切换将在重启后生效',
-    },
-    'en': {
-        'app_title': 'SheCan Video Compressor',
-        'batch_compress': 'Batch Video Compression',
-        'encoder_mode': 'Encoder',
-        'quality': 'Quality',
-        'speed': 'Speed',
-        'resolution': 'Resolution',
-        'output_dir': 'Output',
-        'output_placeholder': 'Default: same as source file',
-        'select': 'Browse',
-        'clear': 'Clear',
-        'drop_hint': 'Drop video files here, or click to select',
-        'format_hint': 'Supports MP4, MKV, AVI, MOV, etc.',
-        'add_files': 'Add Files',
-        'add_folder': 'Add Folder',
-        'remove_selected': 'Remove',
-        'clear_list': 'Clear All',
-        'file_count': '{0} files, {1}',
-        'start': 'Start',
-        'stop': 'Stop',
-        'ready': 'Ready',
-        'preparing': 'Preparing...',
-        'processing': 'Processing {0}/{1}',
-        'done': 'Done {0}/{1}',
-        'compressing': 'Compressing',
-        'waiting': 'Waiting',
-        'failed': 'Failed',
-        'stopping': 'Stopping...',
-        'col_filename': 'Filename',
-        'col_duration': 'Duration',
-        'col_size': 'Size',
-        'col_progress': 'Progress',
-        'col_output': 'Output',
-        'col_status': 'Status',
-        'cpu_h264': 'CPU H.264 (Best Compatibility)',
-        'cpu_h265': 'CPU H.265 (Smaller Size)',
-        'apple_h264': 'Apple GPU H.264 (Recommended)',
-        'apple_h265': 'Apple GPU H.265',
-        'nvidia': 'NVIDIA GPU (Hardware Accel)',
-        'amd': 'AMD GPU (Hardware Accel)',
-        'intel': 'Intel GPU (Quick Sync)',
-        'info_apple': 'Apple hardware acceleration, fast',
-        'info_nvidia': 'NVIDIA GPU acceleration',
-        'info_amd': 'AMD GPU acceleration',
-        'info_intel': 'Intel Quick Sync acceleration',
-        'info_h265': 'H.265 codec, smaller but less compatible',
-        'info_cpu': 'CPU encoding, best compatibility',
-        'high_quality': 'High Quality',
-        'balanced': 'Balanced',
-        'small_size': 'Small Size',
-        'fast': 'Fast',
-        'high_compress': 'High Compress',
-        'keep_original': 'Original',
-        'compress_done': 'Compression Complete',
-        'files_processed': 'Processed:',
-        'original_size': 'Original:',
-        'compressed_size': 'Compressed:',
-        'space_saved': 'Saved:',
-        'size_increased': 'Increased:',
-        'ok': 'OK',
-        'files_unit': '{0}/{1} files',
-        'hint': 'Info',
-        'error': 'Error',
-        'add_files_first': 'Please add video files first',
-        'select_output': 'Select Output Directory',
-        'select_video': 'Select Video Files',
-        'select_folder': 'Select Folder',
-        'video_files': 'Video Files',
-        'all_files': 'All Files',
-        'cannot_create_dir': 'Cannot create output directory: {0}',
-        'language': 'Language',
-        'chinese': '中文',
-        'english': 'English',
-        'restart_hint': 'Language change will take effect after restart',
+def tr(key):
+    """翻译函数"""
+    texts = {
+        'zh': {
+            'app_title': 'SheCan 视频压缩工具',
+            'batch_compress': '视频批量压缩',
+            'encoder_mode': '编码模式',
+            'quality': '质量',
+            'speed': '速度',
+            'resolution': '分辨率',
+            'output_dir': '输出目录',
+            'output_placeholder': '默认保存到原文件所在目录',
+            'select': '选择',
+            'clear': '清除',
+            'drop_hint': '拖放视频文件到这里，或点击选择',
+            'format_hint': '支持 MP4、MKV、AVI、MOV 等格式',
+            'add_files': '添加文件',
+            'add_folder': '添加文件夹',
+            'remove_selected': '移除选中',
+            'clear_list': '清空列表',
+            'start': '开始压缩',
+            'stop': '停止',
+            'ready': '就绪',
+            'preparing': '准备中...',
+            'compressing': '压缩中',
+            'waiting': '等待',
+            'failed': '失败',
+            'stopping': '正在停止...',
+            'col_filename': '文件名',
+            'col_duration': '时长',
+            'col_size': '大小',
+            'col_progress': '进度',
+            'col_output': '压缩后',
+            'col_status': '状态',
+            'high_quality': '高质量',
+            'balanced': '平衡',
+            'small_size': '小体积',
+            'fast': '快速',
+            'high_compress': '高压缩',
+            'keep_original': '保持原始',
+            'compress_done': '压缩完成',
+            'files_processed': '成功处理:',
+            'original_size': '原始大小:',
+            'compressed_size': '压缩后:',
+            'space_saved': '节省空间:',
+            'size_increased': '体积增加:',
+            'ok': '确定',
+            'hint': '提示',
+            'error': '错误',
+            'add_files_first': '请先添加视频文件',
+            'select_output': '选择输出目录',
+            'select_video': '选择视频文件',
+            'select_folder': '选择文件夹',
+            'video_files': '视频文件',
+            'all_files': '所有文件',
+            'cannot_create_dir': '无法创建输出目录',
+            'language': '语言',
+            'chinese': '中文',
+            'english': 'English',
+            'restart_hint': '语言切换将在重启后生效',
+            'ffmpeg_ready': '● FFmpeg 就绪',
+            'ffmpeg_not_found': '● FFmpeg 未找到',
+            'ffmpeg_error_mac': '请安装 FFmpeg:\nbrew install ffmpeg\n或从 https://ffmpeg.org 下载',
+            'ffmpeg_error_win': '请安装 FFmpeg:\n从 https://ffmpeg.org 下载并添加到系统 PATH',
+            'missing_dep': '缺少依赖',
+            # 编码器名称
+            'cpu_h264': 'CPU H.264 (兼容性最好)',
+            'cpu_h265': 'CPU H.265 (体积更小)',
+            'apple_h264': 'Apple GPU H.264 (推荐)',
+            'apple_h265': 'Apple GPU H.265',
+            'nvidia': 'NVIDIA GPU (N卡加速)',
+            'amd': 'AMD GPU (A卡加速)',
+            'intel': 'Intel GPU (核显加速)',
+            # 编码器提示
+            'info_apple': '使用 Apple 硬件加速，速度快',
+            'info_nvidia': '使用 NVIDIA GPU 加速',
+            'info_amd': '使用 AMD GPU 加速',
+            'info_intel': '使用 Intel 核显加速',
+            'info_h265': 'H.265 编码，体积更小但兼容性稍差',
+            'info_cpu': 'CPU 编码，兼容性最好',
+        },
+        'en': {
+            'app_title': 'SheCan Video Compressor',
+            'batch_compress': 'Batch Video Compression',
+            'encoder_mode': 'Encoder',
+            'quality': 'Quality',
+            'speed': 'Speed',
+            'resolution': 'Resolution',
+            'output_dir': 'Output',
+            'output_placeholder': 'Default: same as source file',
+            'select': 'Browse',
+            'clear': 'Clear',
+            'drop_hint': 'Drop video files here, or click to select',
+            'format_hint': 'Supports MP4, MKV, AVI, MOV, etc.',
+            'add_files': 'Add Files',
+            'add_folder': 'Add Folder',
+            'remove_selected': 'Remove',
+            'clear_list': 'Clear All',
+            'start': 'Start',
+            'stop': 'Stop',
+            'ready': 'Ready',
+            'preparing': 'Preparing...',
+            'compressing': 'Compressing',
+            'waiting': 'Waiting',
+            'failed': 'Failed',
+            'stopping': 'Stopping...',
+            'col_filename': 'Filename',
+            'col_duration': 'Duration',
+            'col_size': 'Size',
+            'col_progress': 'Progress',
+            'col_output': 'Output',
+            'col_status': 'Status',
+            'high_quality': 'High Quality',
+            'balanced': 'Balanced',
+            'small_size': 'Small Size',
+            'fast': 'Fast',
+            'high_compress': 'High Compress',
+            'keep_original': 'Original',
+            'compress_done': 'Compression Complete',
+            'files_processed': 'Processed:',
+            'original_size': 'Original:',
+            'compressed_size': 'Compressed:',
+            'space_saved': 'Saved:',
+            'size_increased': 'Increased:',
+            'ok': 'OK',
+            'hint': 'Info',
+            'error': 'Error',
+            'add_files_first': 'Please add video files first',
+            'select_output': 'Select Output Directory',
+            'select_video': 'Select Video Files',
+            'select_folder': 'Select Folder',
+            'video_files': 'Video Files',
+            'all_files': 'All Files',
+            'cannot_create_dir': 'Cannot create output directory',
+            'language': 'Language',
+            'chinese': '中文',
+            'english': 'English',
+            'restart_hint': 'Language change will take effect after restart',
+            'ffmpeg_ready': '● FFmpeg Ready',
+            'ffmpeg_not_found': '● FFmpeg Not Found',
+            'ffmpeg_error_mac': 'Please install FFmpeg:\nbrew install ffmpeg\nor download from https://ffmpeg.org',
+            'ffmpeg_error_win': 'Please install FFmpeg:\nDownload from https://ffmpeg.org and add to PATH',
+            'missing_dep': 'Missing Dependency',
+            # Encoder names
+            'cpu_h264': 'CPU H.264 (Best Compatibility)',
+            'cpu_h265': 'CPU H.265 (Smaller Size)',
+            'apple_h264': 'Apple GPU H.264 (Recommended)',
+            'apple_h265': 'Apple GPU H.265',
+            'nvidia': 'NVIDIA GPU (Hardware Accel)',
+            'amd': 'AMD GPU (Hardware Accel)',
+            'intel': 'Intel GPU (Quick Sync)',
+            # Encoder info
+            'info_apple': 'Apple hardware acceleration, fast',
+            'info_nvidia': 'NVIDIA GPU acceleration',
+            'info_amd': 'AMD GPU acceleration',
+            'info_intel': 'Intel Quick Sync acceleration',
+            'info_h265': 'H.265 codec, smaller but less compatible',
+            'info_cpu': 'CPU encoding, best compatibility',
+        }
     }
-}
-
-def tr(key, *args):
-    text = TR.get(get_lang(), TR['zh']).get(key, key)
-    if args:
-        return text.format(*args)
-    return text
+    return texts.get(get_lang(), texts['zh']).get(key, key)
 
 
+# ============ FFmpeg 路径 ============
 def get_ffmpeg_path():
-    """Get bundled FFmpeg path"""
+    """获取 FFmpeg 路径 - 优先使用内置版本"""
     if getattr(sys, 'frozen', False):
-        # Running as compiled app
+        # 打包后的应用
         if IS_WIN:
-            # PyInstaller on Windows
-            return os.path.join(sys._MEIPASS, 'ffmpeg', 'ffmpeg.exe')
+            # Windows: PyInstaller 打包，FFmpeg 在 _MEIPASS/ffmpeg/
+            bundled = os.path.join(sys._MEIPASS, 'ffmpeg', 'ffmpeg.exe')
+            if os.path.exists(bundled):
+                return bundled
         else:
-            # py2app on macOS: sys.executable is in Contents/MacOS/
-            # FFmpeg is in Contents/Resources/ffmpeg/
+            # macOS: py2app 打包，FFmpeg 在 Contents/Resources/ffmpeg/
             exe_dir = os.path.dirname(sys.executable)  # Contents/MacOS
             contents_dir = os.path.dirname(exe_dir)     # Contents
-            return os.path.join(contents_dir, 'Resources', 'ffmpeg', 'ffmpeg')
-    # Development mode
-    return 'ffmpeg'
+            bundled = os.path.join(contents_dir, 'Resources', 'ffmpeg', 'ffmpeg')
+            if os.path.exists(bundled):
+                return bundled
+    
+    # 开发模式或内置版本不存在时，查找系统 FFmpeg
+    if IS_WIN:
+        return 'ffmpeg'
+    else:
+        paths = [
+            '/opt/homebrew/bin/ffmpeg',
+            '/usr/local/bin/ffmpeg',
+            os.path.expanduser('~/bin/ffmpeg'),
+        ]
+        for p in paths:
+            if os.path.exists(p):
+                return p
+        return 'ffmpeg'
+
 
 def get_ffprobe_path():
+    """获取 FFprobe 路径"""
     ffmpeg = get_ffmpeg_path()
-    return ffmpeg.replace('ffmpeg.exe', 'ffprobe.exe') if IS_WIN else ffmpeg.replace('ffmpeg', 'ffprobe')
+    if IS_WIN:
+        return ffmpeg.replace('ffmpeg.exe', 'ffprobe.exe')
+    return ffmpeg.replace('ffmpeg', 'ffprobe')
 
 
-# Encoder configurations
+# ============ 编码器配置 ============
 def get_encoders_config():
+    """根据系统返回编码器配置"""
+    lang = get_lang()
+    
+    # 质量映射 key
+    q_high = tr('high_quality')
+    q_bal = tr('balanced')
+    q_small = tr('small_size')
+    
+    # 速度映射 key
+    s_fast = tr('fast')
+    s_bal = tr('balanced')
+    s_high = tr('high_compress')
+    
     encoders = {
         tr('cpu_h264'): {
-            'encoder': 'libx264', 'quality_param': '-crf',
-            'quality_map': {tr('high_quality'): '18', tr('balanced'): '23', tr('small_size'): '30'},
-            'has_preset': True, 'preset_map': {tr('fast'): 'veryfast', tr('balanced'): 'medium', tr('high_compress'): 'slow'}
+            'encoder': 'libx264',
+            'quality_param': '-crf',
+            'quality_map': {q_high: '18', q_bal: '23', q_small: '30'},
+            'has_preset': True,
+            'preset_map': {s_fast: 'veryfast', s_bal: 'medium', s_high: 'slow'}
         },
         tr('cpu_h265'): {
-            'encoder': 'libx265', 'quality_param': '-crf',
-            'quality_map': {tr('high_quality'): '22', tr('balanced'): '28', tr('small_size'): '35'},
-            'has_preset': True, 'preset_map': {tr('fast'): 'veryfast', tr('balanced'): 'medium', tr('high_compress'): 'slow'}
+            'encoder': 'libx265',
+            'quality_param': '-crf',
+            'quality_map': {q_high: '22', q_bal: '28', q_small: '35'},
+            'has_preset': True,
+            'preset_map': {s_fast: 'veryfast', s_bal: 'medium', s_high: 'slow'}
         }
     }
+    
     if IS_MAC:
         encoders[tr('apple_h264')] = {
-            'encoder': 'h264_videotoolbox', 'quality_param': '-b:v',
-            'quality_map': {tr('high_quality'): '8M', tr('balanced'): '4M', tr('small_size'): '2M'},
-            'has_preset': False, 'preset_map': {}
+            'encoder': 'h264_videotoolbox',
+            'quality_param': '-b:v',
+            'quality_map': {q_high: '8M', q_bal: '4M', q_small: '2M'},
+            'has_preset': False,
+            'preset_map': {}
         }
         encoders[tr('apple_h265')] = {
-            'encoder': 'hevc_videotoolbox', 'quality_param': '-b:v',
-            'quality_map': {tr('high_quality'): '6M', tr('balanced'): '3M', tr('small_size'): '1.5M'},
-            'has_preset': False, 'preset_map': {}
+            'encoder': 'hevc_videotoolbox',
+            'quality_param': '-b:v',
+            'quality_map': {q_high: '6M', q_bal: '3M', q_small: '1.5M'},
+            'has_preset': False,
+            'preset_map': {}
         }
+    
     if IS_WIN:
         encoders[tr('nvidia')] = {
-            'encoder': 'h264_nvenc', 'quality_param': '-cq',
-            'quality_map': {tr('high_quality'): '19', tr('balanced'): '23', tr('small_size'): '28'},
-            'has_preset': True, 'preset_map': {tr('fast'): 'fast', tr('balanced'): 'medium', tr('high_compress'): 'slow'}
+            'encoder': 'h264_nvenc',
+            'quality_param': '-cq',
+            'quality_map': {q_high: '19', q_bal: '23', q_small: '28'},
+            'has_preset': True,
+            'preset_map': {s_fast: 'fast', s_bal: 'medium', s_high: 'slow'}
         }
         encoders[tr('amd')] = {
-            'encoder': 'h264_amf', 'quality_param': '-qp_i',
-            'quality_map': {tr('high_quality'): '18', tr('balanced'): '23', tr('small_size'): '28'},
-            'has_preset': False, 'preset_map': {}
+            'encoder': 'h264_amf',
+            'quality_param': '-qp_i',
+            'quality_map': {q_high: '18', q_bal: '23', q_small: '28'},
+            'has_preset': False,
+            'preset_map': {}
         }
         encoders[tr('intel')] = {
-            'encoder': 'h264_qsv', 'quality_param': '-global_quality',
-            'quality_map': {tr('high_quality'): '20', tr('balanced'): '25', tr('small_size'): '30'},
-            'has_preset': True, 'preset_map': {tr('fast'): 'veryfast', tr('balanced'): 'medium', tr('high_compress'): 'slow'}
+            'encoder': 'h264_qsv',
+            'quality_param': '-global_quality',
+            'quality_map': {q_high: '20', q_bal: '25', q_small: '30'},
+            'has_preset': True,
+            'preset_map': {s_fast: 'veryfast', s_bal: 'medium', s_high: 'slow'}
         }
+    
     return encoders
 
+
 def detect_available_encoders(encoders):
+    """检测可用的编码器"""
     available = []
     try:
+        ffmpeg = get_ffmpeg_path()
         kwargs = {'capture_output': True, 'text': True, 'timeout': 10}
         if IS_WIN:
             kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-        output = subprocess.run([get_ffmpeg_path(), '-hide_banner', '-encoders'], **kwargs).stdout
+        result = subprocess.run([ffmpeg, '-hide_banner', '-encoders'], **kwargs)
+        output = result.stdout
+        
         for name, cfg in encoders.items():
             if cfg['encoder'] in output:
                 available.append(name)
-    except:
-        pass
-    return available or [tr('cpu_h264')]
+    except Exception as e:
+        print(f"检测编码器失败: {e}")
+    
+    if not available:
+        available = [tr('cpu_h264')]
+    
+    return available
 
 
+# ============ 结果弹窗 ============
 class ResultDialog(QDialog):
     def __init__(self, parent, completed, total, input_size, output_size):
         super().__init__(parent)
@@ -361,17 +426,18 @@ class ResultDialog(QDialog):
         saved = input_size - output_size
         ratio = abs(saved) / input_size * 100 if input_size > 0 else 0
         
-        info = [
-            (tr('files_processed'), tr('files_unit', completed, total), "#333"),
+        info_data = [
+            (tr('files_processed'), f"{completed}/{total}", "#333"),
             (tr('original_size'), self._fmt(input_size), "#333"),
             (tr('compressed_size'), self._fmt(output_size), "#333"),
         ]
-        if saved > 0:
-            info.append((tr('space_saved'), f"-{self._fmt(saved)} ({ratio:.0f}%)", "#34c759"))
-        elif saved < 0:
-            info.append((tr('size_increased'), f"+{self._fmt(abs(saved))} ({ratio:.0f}%)", "#ff9500"))
         
-        for label, value, color in info:
+        if saved > 0:
+            info_data.append((tr('space_saved'), f"-{self._fmt(saved)} ({ratio:.0f}%)", "#34c759"))
+        elif saved < 0:
+            info_data.append((tr('size_increased'), f"+{self._fmt(abs(saved))} ({ratio:.0f}%)", "#ff9500"))
+        
+        for label, value, color in info_data:
             row = QHBoxLayout()
             l = QLabel(label)
             l.setStyleSheet("font-size: 13px; color: #666;")
@@ -383,40 +449,57 @@ class ResultDialog(QDialog):
             layout.addLayout(row)
         
         layout.addStretch()
+        
         ok_btn = QPushButton(tr('ok'))
         ok_btn.setFixedHeight(32)
-        ok_btn.setStyleSheet("QPushButton { background: #007AFF; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; } QPushButton:hover { background: #0066d6; }")
+        ok_btn.setStyleSheet("""
+            QPushButton { background: #007AFF; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; }
+            QPushButton:hover { background: #0066d6; }
+        """)
         ok_btn.clicked.connect(self.accept)
         layout.addWidget(ok_btn)
     
     def _fmt(self, size):
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if size < 1024: return f"{size:.1f} {unit}"
+            if size < 1024:
+                return f"{size:.1f} {unit}"
             size /= 1024
         return f"{size:.1f} PB"
 
 
+# ============ 视频信息工作线程 ============
 class VideoInfoWorker(QThread):
     info_ready = pyqtSignal(int, str)
+    
     def __init__(self, row, filepath):
         super().__init__()
-        self.row, self.filepath = row, filepath
+        self.row = row
+        self.filepath = filepath
+    
     def run(self):
         dur_str = "-"
         try:
-            cmd = [get_ffprobe_path(), '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', self.filepath]
+            ffprobe = get_ffprobe_path()
+            cmd = [ffprobe, '-v', 'error', '-show_entries', 'format=duration',
+                   '-of', 'default=noprint_wrappers=1:nokey=1', self.filepath]
+            
             kwargs = {'capture_output': True, 'text': True, 'timeout': 10}
-            if IS_WIN: kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-            r = subprocess.run(cmd, **kwargs)
-            if r.returncode == 0 and r.stdout.strip():
-                dur = float(r.stdout.strip())
+            if IS_WIN:
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            
+            result = subprocess.run(cmd, **kwargs)
+            if result.returncode == 0 and result.stdout.strip():
+                dur = float(result.stdout.strip())
                 m, s = divmod(int(dur), 60)
                 h, m = divmod(m, 60)
                 dur_str = f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
-        except: pass
+        except Exception as e:
+            print(f"获取时长失败: {e}")
+        
         self.info_ready.emit(self.row, dur_str)
 
 
+# ============ 压缩工作线程 ============
 class CompressionWorker(QThread):
     progress = pyqtSignal(int, int, str)
     file_done = pyqtSignal(int, bool, int)
@@ -425,58 +508,109 @@ class CompressionWorker(QThread):
     
     def __init__(self, files, settings, encoders):
         super().__init__()
-        self.files, self.settings, self.encoders = files, settings, encoders
+        self.files = files
+        self.settings = settings
+        self.encoders = encoders
         self.should_stop = False
         self.process = None
 
+    def get_duration(self, path):
+        try:
+            ffprobe = get_ffprobe_path()
+            cmd = [ffprobe, '-v', 'error', '-show_entries', 'format=duration',
+                   '-of', 'default=noprint_wrappers=1:nokey=1', path]
+            kwargs = {'capture_output': True, 'text': True, 'timeout': 30}
+            if IS_WIN:
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            r = subprocess.run(cmd, **kwargs)
+            return float(r.stdout.strip()) if r.stdout.strip() else 0
+        except:
+            return 0
+    
     def run(self):
-        total, completed, total_in, total_out = len(self.files), 0, 0, 0
-        enc_cfg = self.encoders.get(self.settings['encoder_name'], list(self.encoders.values())[0])
+        total = len(self.files)
+        completed = 0
+        total_in = 0
+        total_out = 0
+        
+        enc_name = self.settings['encoder_name']
+        enc_cfg = self.encoders.get(enc_name, list(self.encoders.values())[0])
+        quality = self.settings['quality']
+        speed = self.settings['speed']
         threads = max(2, CPU_COUNT // 2)
         ffmpeg = get_ffmpeg_path()
         
         for i, f in enumerate(self.files):
-            if self.should_stop: break
-            in_path, in_size = f['path'], f['size']
+            if self.should_stop:
+                break
+            
+            in_path = f['path']
+            in_size = f['size']
             total_in += in_size
+            
             out_dir = self.settings.get('output_dir') or os.path.dirname(in_path)
-            out_path = os.path.join(out_dir, f"{os.path.splitext(f['name'])[0]}_compressed.mp4")
+            name = os.path.splitext(f['name'])[0]
+            out_path = os.path.join(out_dir, f"{name}_compressed.mp4")
             
             self.progress.emit(i, 0, tr('preparing'))
+            
             if not os.path.exists(in_path):
                 self.file_done.emit(i, False, 0)
                 continue
+            
             try:
                 os.makedirs(out_dir, exist_ok=True)
             except Exception as e:
-                self.error.emit(tr('cannot_create_dir', str(e)))
+                self.error.emit(f"{tr('cannot_create_dir')}: {e}")
                 self.file_done.emit(i, False, 0)
                 continue
             
-            q_val = enc_cfg['quality_map'].get(self.settings['quality'], '23')
-            cmd = [ffmpeg, '-i', in_path, '-c:v', enc_cfg['encoder'], enc_cfg['quality_param'], q_val]
-            if enc_cfg.get('has_preset'):
-                cmd.extend(['-preset', enc_cfg['preset_map'].get(self.settings['speed'], 'medium')])
-            res = self.settings.get('resolution', tr('keep_original'))
-            if res == '1080p': cmd.extend(['-vf', 'scale=-2:1080'])
-            elif res == '720p': cmd.extend(['-vf', 'scale=-2:720'])
-            elif res == '480p': cmd.extend(['-vf', 'scale=-2:480'])
-            cmd.extend(['-threads', str(threads), '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', '-y', out_path])
+            q_val = enc_cfg['quality_map'].get(quality, '23')
+            cmd = [ffmpeg, '-i', in_path, '-c:v', enc_cfg['encoder'],
+                   enc_cfg['quality_param'], q_val]
             
-            duration = self._get_duration(in_path)
+            if enc_cfg.get('has_preset') and enc_cfg.get('preset_map'):
+                preset = enc_cfg['preset_map'].get(speed, 'medium')
+                cmd.extend(['-preset', preset])
+            
+            res = self.settings.get('resolution', tr('keep_original'))
+            if res == '1080p':
+                cmd.extend(['-vf', 'scale=-2:1080'])
+            elif res == '720p':
+                cmd.extend(['-vf', 'scale=-2:720'])
+            elif res == '480p':
+                cmd.extend(['-vf', 'scale=-2:480'])
+            
+            cmd.extend([
+                '-threads', str(threads),
+                '-c:a', 'aac', '-b:a', '128k',
+                '-movflags', '+faststart',
+                '-y', out_path
+            ])
+            
+            duration = self.get_duration(in_path)
+            
             try:
                 kwargs = {'stderr': subprocess.PIPE, 'universal_newlines': True}
-                if IS_WIN: kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+                if IS_WIN:
+                    kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+                
                 self.process = subprocess.Popen(cmd, **kwargs)
+                
                 for line in self.process.stderr:
                     if self.should_stop:
                         self.process.terminate()
                         break
-                    m = re.search(r'time=(\d+):(\d+):(\d+\.?\d*)', line)
-                    if m and duration > 0:
-                        cur = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
-                        self.progress.emit(i, min(int(cur / duration * 100), 99), tr('compressing'))
+                    
+                    match = re.search(r'time=(\d+):(\d+):(\d+\.?\d*)', line)
+                    if match and duration > 0:
+                        h, m, s = match.groups()
+                        cur = int(h) * 3600 + int(m) * 60 + float(s)
+                        pct = min(int(cur / duration * 100), 99)
+                        self.progress.emit(i, pct, tr('compressing'))
+                
                 self.process.wait()
+                
                 if self.process.returncode == 0 and os.path.exists(out_path):
                     out_size = os.path.getsize(out_path)
                     if out_size > 0:
@@ -488,26 +622,23 @@ class CompressionWorker(QThread):
                         self.file_done.emit(i, False, 0)
                 else:
                     self.file_done.emit(i, False, 0)
-            except:
+                    
+            except Exception as e:
+                print(f"压缩异常: {e}")
                 self.file_done.emit(i, False, 0)
+        
         self.all_done.emit(completed, total, total_in, total_out)
-    
-    def _get_duration(self, path):
-        try:
-            cmd = [get_ffprobe_path(), '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', path]
-            kwargs = {'capture_output': True, 'text': True, 'timeout': 30}
-            if IS_WIN: kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-            r = subprocess.run(cmd, **kwargs)
-            return float(r.stdout.strip()) if r.stdout.strip() else 0
-        except: return 0
     
     def stop(self):
         self.should_stop = True
         if self.process:
-            try: self.process.terminate()
-            except: pass
+            try:
+                self.process.terminate()
+            except:
+                pass
 
 
+# ============ 拖放区域 ============
 class DropArea(QFrame):
     files_dropped = pyqtSignal(list)
     clicked = pyqtSignal()
@@ -518,63 +649,111 @@ class DropArea(QFrame):
         self.setMinimumHeight(80)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._update_style(False)
+        
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setSpacing(4)
-        for text, style in [(tr('drop_hint'), "color: #666; font-size: 14px;"), (tr('format_hint'), "color: #999; font-size: 12px;")]:
-            lbl = QLabel(text)
-            lbl.setStyleSheet(f"{style} border: none; background: transparent;")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(lbl)
+        
+        label = QLabel(tr('drop_hint'))
+        label.setStyleSheet("color: #666; font-size: 14px; border: none; background: transparent;")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(label)
+        
+        hint = QLabel(tr('format_hint'))
+        hint.setStyleSheet("color: #999; font-size: 12px; border: none; background: transparent;")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(hint)
     
     def _update_style(self, hover):
-        c, bg = ("#007AFF", "#f0f7ff") if hover else ("#c0c0c0", "#fafafa")
-        self.setStyleSheet(f"QFrame {{ border: 1.5px dashed {c}; border-radius: 10px; background: {bg}; }}")
+        color = "#007AFF" if hover else "#c0c0c0"
+        bg = "#f0f7ff" if hover else "#fafafa"
+        self.setStyleSheet(f"QFrame {{ border: 1.5px dashed {color}; border-radius: 10px; background: {bg}; }}")
     
-    def mousePressEvent(self, e): self.clicked.emit()
-    def enterEvent(self, e): self._update_style(True)
-    def leaveEvent(self, e): self._update_style(False)
+    def mousePressEvent(self, e):
+        self.clicked.emit()
+    
+    def enterEvent(self, e):
+        self._update_style(True)
+    
+    def leaveEvent(self, e):
+        self._update_style(False)
+    
     def dragEnterEvent(self, e):
-        if e.mimeData().hasUrls(): e.acceptProposedAction(); self._update_style(True)
-    def dragLeaveEvent(self, e): self._update_style(False)
+        if e.mimeData().hasUrls():
+            e.acceptProposedAction()
+            self._update_style(True)
+    
+    def dragLeaveEvent(self, e):
+        self._update_style(False)
+    
     def dropEvent(self, e):
         self._update_style(False)
-        exts = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.ts'}
         files = []
+        exts = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.ts'}
+        
         for url in e.mimeData().urls():
             p = url.toLocalFile()
-            if os.path.isfile(p) and Path(p).suffix.lower() in exts: files.append(p)
+            if os.path.isfile(p) and Path(p).suffix.lower() in exts:
+                files.append(p)
             elif os.path.isdir(p):
-                files.extend(str(f) for f in Path(p).rglob('*') if f.is_file() and f.suffix.lower() in exts)
-        if files: self.files_dropped.emit(files)
+                for f in Path(p).rglob('*'):
+                    if f.is_file() and f.suffix.lower() in exts:
+                        files.append(str(f))
+        
+        if files:
+            self.files_dropped.emit(files)
 
 
+# ============ 主窗口 ============
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.files, self.worker, self.info_workers = [], None, []
-        self.encoders = get_encoders_config()
+        self.files = []
+        self.worker = None
+        self.info_workers = []
+        self.encoders = {}
+        self.available_encoders = []
         self.init_ui()
+        # 延迟检查环境，确保 UI 已完全初始化
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self.check_environment)
     
     def init_ui(self):
         self.setWindowTitle(tr('app_title'))
         self.setMinimumSize(900, 660)
+        
         self.setStyleSheet("""
             QMainWindow { background-color: #f5f5f7; }
-            QComboBox { padding: 5px 10px; border: 1px solid #d2d2d7; border-radius: 5px; background: white; color: #333; min-width: 80px; font-size: 13px; }
+            QComboBox {
+                padding: 5px 10px; border: 1px solid #d2d2d7; border-radius: 5px;
+                background: white; color: #333; min-width: 80px; font-size: 13px;
+            }
             QComboBox:hover { border-color: #007AFF; }
             QComboBox::drop-down { border: none; width: 18px; }
-            QComboBox QAbstractItemView { background: white; color: #333; border: 1px solid #d2d2d7; selection-background-color: #007AFF; selection-color: white; }
-            QLineEdit { padding: 5px 10px; border: 1px solid #d2d2d7; border-radius: 5px; background: white; color: #333; font-size: 13px; }
-            QTableWidget { border: 1px solid #d2d2d7; border-radius: 8px; background: white; color: #333; font-size: 13px; }
+            QComboBox QAbstractItemView {
+                background: white; color: #333; border: 1px solid #d2d2d7;
+                selection-background-color: #007AFF; selection-color: white;
+            }
+            QLineEdit {
+                padding: 5px 10px; border: 1px solid #d2d2d7; border-radius: 5px;
+                background: white; color: #333; font-size: 13px;
+            }
+            QLineEdit:focus { border-color: #007AFF; }
+            QTableWidget {
+                border: 1px solid #d2d2d7; border-radius: 8px; background: white;
+                color: #333; font-size: 13px;
+            }
             QTableWidget::item { padding: 4px 8px; color: #333; }
             QTableWidget::item:selected { background-color: #007AFF; color: white; }
-            QHeaderView::section { background: #fafafa; border: none; border-bottom: 1px solid #e0e0e0; padding: 8px; font-weight: 500; font-size: 12px; color: #666; }
+            QHeaderView::section {
+                background: #fafafa; border: none; border-bottom: 1px solid #e0e0e0;
+                padding: 8px; font-weight: 500; font-size: 12px; color: #666;
+            }
             QProgressBar { border: none; border-radius: 3px; background: #e0e0e0; height: 6px; }
             QProgressBar::chunk { background: #007AFF; border-radius: 3px; }
         """)
         
-        # Menu bar with language switch
+        # 菜单栏 - 语言切换
         menubar = self.menuBar()
         settings_menu = menubar.addMenu(tr('language'))
         zh_action = QAction(tr('chinese'), self)
@@ -590,302 +769,590 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(10)
         
-        # Title
+        # 标题行
         title_row = QHBoxLayout()
         title = QLabel(tr('batch_compress'))
         title.setStyleSheet("font-size: 18px; font-weight: 600; color: #1d1d1f;")
         title_row.addWidget(title)
         title_row.addStretch()
+        self.status_indicator = QLabel()
+        self.status_indicator.setStyleSheet("font-size: 11px;")
+        title_row.addWidget(self.status_indicator)
         layout.addLayout(title_row)
         
-        # Encoder
-        enc_frame = QFrame()
-        enc_frame.setStyleSheet("QFrame { background: #e8f4ff; border-radius: 8px; } QLabel { background: transparent; color: #333; }")
-        enc_layout = QHBoxLayout(enc_frame)
-        enc_layout.setContentsMargins(14, 10, 14, 10)
-        enc_lbl = QLabel(tr('encoder_mode'))
-        enc_lbl.setStyleSheet("font-size: 13px; font-weight: 500; color: #007AFF;")
-        enc_layout.addWidget(enc_lbl)
+        # 编码模式
+        encoder_frame = QFrame()
+        encoder_frame.setStyleSheet("QFrame { background: #e8f4ff; border-radius: 8px; } QLabel { background: transparent; color: #333; }")
+        encoder_layout = QHBoxLayout(encoder_frame)
+        encoder_layout.setContentsMargins(14, 10, 14, 10)
+        
+        enc_label = QLabel(tr('encoder_mode'))
+        enc_label.setStyleSheet("font-size: 13px; font-weight: 500; color: #007AFF;")
+        encoder_layout.addWidget(enc_label)
+        
         self.encoder_combo = QComboBox()
         self.encoder_combo.setMinimumWidth(200)
         self.encoder_combo.currentTextChanged.connect(self.on_encoder_changed)
-        enc_layout.addWidget(self.encoder_combo)
-        enc_layout.addSpacing(16)
+        encoder_layout.addWidget(self.encoder_combo)
+        
+        encoder_layout.addSpacing(16)
         self.encoder_info = QLabel()
         self.encoder_info.setStyleSheet("font-size: 12px; color: #666;")
-        enc_layout.addWidget(self.encoder_info)
-        enc_layout.addStretch()
-        layout.addWidget(enc_frame)
+        encoder_layout.addWidget(self.encoder_info)
+        encoder_layout.addStretch()
+        layout.addWidget(encoder_frame)
         
-        # Settings
+        # 设置行
         settings_frame = QFrame()
         settings_frame.setStyleSheet("QFrame { background: white; border-radius: 8px; border: 1px solid #e0e0e0; } QLabel { background: transparent; color: #333; }")
         settings_layout = QHBoxLayout(settings_frame)
         settings_layout.setContentsMargins(14, 10, 14, 10)
         settings_layout.setSpacing(20)
         
-        quality_items = [tr('high_quality'), tr('balanced'), tr('small_size')]
-        speed_items = [tr('fast'), tr('balanced'), tr('high_compress')]
-        res_items = [tr('keep_original'), '1080p', '720p', '480p']
+        # 质量
+        q_label = QLabel(tr('quality'))
+        q_label.setStyleSheet("font-size: 13px; color: #666;")
+        settings_layout.addWidget(q_label)
+        self.quality_combo = QComboBox()
+        self.quality_combo.addItems([tr('high_quality'), tr('balanced'), tr('small_size')])
+        self.quality_combo.setCurrentText(tr('balanced'))
+        settings_layout.addWidget(self.quality_combo)
         
-        for lbl_text, items, default in [(tr('quality'), quality_items, tr('balanced')),
-                                          (tr('speed'), speed_items, tr('balanced')),
-                                          (tr('resolution'), res_items, tr('keep_original'))]:
-            l = QLabel(lbl_text)
-            l.setStyleSheet("font-size: 13px; color: #666;")
-            settings_layout.addWidget(l)
-            combo = QComboBox()
-            combo.addItems(items)
-            combo.setCurrentText(default)
-            settings_layout.addWidget(combo)
-            if lbl_text == tr('quality'): self.quality_combo = combo
-            elif lbl_text == tr('speed'): self.speed_combo = combo
-            else: self.resolution_combo = combo
+        # 速度
+        s_label = QLabel(tr('speed'))
+        s_label.setStyleSheet("font-size: 13px; color: #666;")
+        settings_layout.addWidget(s_label)
+        self.speed_combo = QComboBox()
+        self.speed_combo.addItems([tr('fast'), tr('balanced'), tr('high_compress')])
+        self.speed_combo.setCurrentText(tr('balanced'))
+        settings_layout.addWidget(self.speed_combo)
+        
+        # 分辨率
+        r_label = QLabel(tr('resolution'))
+        r_label.setStyleSheet("font-size: 13px; color: #666;")
+        settings_layout.addWidget(r_label)
+        self.resolution_combo = QComboBox()
+        self.resolution_combo.addItems([tr('keep_original'), '1080p', '720p', '480p'])
+        settings_layout.addWidget(self.resolution_combo)
+        
         settings_layout.addStretch()
         layout.addWidget(settings_frame)
         
-        # Output
-        out_frame = QFrame()
-        out_frame.setStyleSheet("QFrame { background: white; border-radius: 8px; border: 1px solid #e0e0e0; } QLabel { background: transparent; color: #333; }")
-        out_layout = QHBoxLayout(out_frame)
-        out_layout.setContentsMargins(14, 10, 14, 10)
-        out_lbl = QLabel(tr('output_dir'))
-        out_lbl.setStyleSheet("font-size: 13px; color: #666;")
-        out_layout.addWidget(out_lbl)
+        # 输出目录
+        output_frame = QFrame()
+        output_frame.setStyleSheet("QFrame { background: white; border-radius: 8px; border: 1px solid #e0e0e0; } QLabel { background: transparent; color: #333; }")
+        output_layout = QHBoxLayout(output_frame)
+        output_layout.setContentsMargins(14, 10, 14, 10)
+        
+        out_label = QLabel(tr('output_dir'))
+        out_label.setStyleSheet("font-size: 13px; color: #666;")
+        output_layout.addWidget(out_label)
+        
         self.output_edit = QLineEdit()
         self.output_edit.setPlaceholderText(tr('output_placeholder'))
         self.output_edit.setReadOnly(True)
-        out_layout.addWidget(self.output_edit, 1)
-        for text, slot in [(tr('select'), self.browse_output), (tr('clear'), lambda: self.output_edit.clear())]:
-            btn = QPushButton(text)
-            btn.setFixedSize(60, 28)
-            btn.setStyleSheet("QPushButton { background: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; } QPushButton:hover { background: #e0e0e0; }")
-            btn.clicked.connect(slot)
-            out_layout.addWidget(btn)
-        layout.addWidget(out_frame)
+        output_layout.addWidget(self.output_edit, 1)
         
-        # Drop area
+        browse_btn = QPushButton(tr('select'))
+        browse_btn.setFixedSize(60, 28)
+        browse_btn.setStyleSheet("""
+            QPushButton { background: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; }
+            QPushButton:hover { background: #e0e0e0; }
+        """)
+        browse_btn.clicked.connect(self.browse_output)
+        output_layout.addWidget(browse_btn)
+        
+        clear_out_btn = QPushButton(tr('clear'))
+        clear_out_btn.setFixedSize(60, 28)
+        clear_out_btn.setStyleSheet("""
+            QPushButton { background: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; }
+            QPushButton:hover { background: #e0e0e0; }
+        """)
+        clear_out_btn.clicked.connect(lambda: self.output_edit.clear())
+        output_layout.addWidget(clear_out_btn)
+        
+        layout.addWidget(output_frame)
+        
+        # 拖放区域
         self.drop_area = DropArea()
         self.drop_area.files_dropped.connect(self.add_files)
         self.drop_area.clicked.connect(self.browse_files)
         layout.addWidget(self.drop_area)
-        
-        # Buttons
+
+        # 文件操作按钮
         btn_row = QHBoxLayout()
-        for text, slot in [(tr('add_files'), self.browse_files), (tr('add_folder'), self.browse_folder)]:
-            btn = QPushButton(text)
-            btn.setFixedHeight(30)
-            btn.setStyleSheet("QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; } QPushButton:hover { background: #f5f5f5; border-color: #007AFF; }")
-            btn.clicked.connect(slot)
-            btn_row.addWidget(btn)
+        
+        add_file_btn = QPushButton(tr('add_files'))
+        add_file_btn.setFixedHeight(30)
+        add_file_btn.setStyleSheet("""
+            QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; }
+            QPushButton:hover { background: #f5f5f5; border-color: #007AFF; }
+        """)
+        add_file_btn.clicked.connect(self.browse_files)
+        btn_row.addWidget(add_file_btn)
+        
+        add_folder_btn = QPushButton(tr('add_folder'))
+        add_folder_btn.setFixedHeight(30)
+        add_folder_btn.setStyleSheet("""
+            QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; }
+            QPushButton:hover { background: #f5f5f5; border-color: #007AFF; }
+        """)
+        add_folder_btn.clicked.connect(self.browse_folder)
+        btn_row.addWidget(add_folder_btn)
+        
         btn_row.addStretch()
-        self.file_count_label = QLabel(tr('file_count', 0, '0 B'))
+        
+        self.file_count_label = QLabel(f"{tr('col_filename')}: 0")
         self.file_count_label.setStyleSheet("font-size: 12px; color: #666;")
         btn_row.addWidget(self.file_count_label)
+        
         btn_row.addStretch()
-        for text, slot in [(tr('remove_selected'), self.remove_selected), (tr('clear_list'), self.clear_files)]:
-            btn = QPushButton(text)
-            btn.setFixedHeight(30)
-            btn.setStyleSheet("QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; } QPushButton:hover { background: #fff0f0; border-color: #ff3b30; color: #ff3b30; }")
-            btn.clicked.connect(slot)
-            btn_row.addWidget(btn)
+        
+        remove_btn = QPushButton(tr('remove_selected'))
+        remove_btn.setFixedHeight(30)
+        remove_btn.setStyleSheet("""
+            QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; }
+            QPushButton:hover { background: #fff0f0; border-color: #ff3b30; color: #ff3b30; }
+        """)
+        remove_btn.clicked.connect(self.remove_selected)
+        btn_row.addWidget(remove_btn)
+        
+        clear_btn = QPushButton(tr('clear_list'))
+        clear_btn.setFixedHeight(30)
+        clear_btn.setStyleSheet("""
+            QPushButton { background: white; border: 1px solid #d0d0d0; border-radius: 5px; color: #333; font-size: 12px; padding: 0 12px; }
+            QPushButton:hover { background: #fff0f0; border-color: #ff3b30; color: #ff3b30; }
+        """)
+        clear_btn.clicked.connect(self.clear_files)
+        btn_row.addWidget(clear_btn)
+        
         layout.addLayout(btn_row)
         
-        # Table
+        # 文件表格
         self.table = QTableWidget()
         self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels([tr('col_filename'), tr('col_duration'), tr('col_size'), tr('col_progress'), tr('col_output'), tr('col_status')])
+        self.table.setHorizontalHeaderLabels([
+            tr('col_filename'), tr('col_duration'), tr('col_size'),
+            tr('col_progress'), tr('col_output'), tr('col_status')
+        ])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for i, w in [(1, 70), (2, 80), (3, 100), (4, 80), (5, 80)]:
-            self.table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.Fixed)
-            self.table.setColumnWidth(i, w)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(1, 70)
+        self.table.setColumnWidth(2, 80)
+        self.table.setColumnWidth(3, 100)
+        self.table.setColumnWidth(4, 80)
+        self.table.setColumnWidth(5, 80)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
         layout.addWidget(self.table, 1)
         
-        # Bottom
-        bottom = QHBoxLayout()
+        # 底部进度和按钮
+        bottom_row = QHBoxLayout()
+        
         self.total_progress = QProgressBar()
         self.total_progress.setFixedHeight(8)
         self.total_progress.setTextVisible(False)
-        bottom.addWidget(self.total_progress, 1)
+        bottom_row.addWidget(self.total_progress, 1)
+        
         self.progress_label = QLabel(tr('ready'))
         self.progress_label.setStyleSheet("font-size: 12px; color: #666; min-width: 100px;")
-        bottom.addWidget(self.progress_label)
+        bottom_row.addWidget(self.progress_label)
+        
         self.stop_btn = QPushButton(tr('stop'))
         self.stop_btn.setFixedSize(70, 32)
         self.stop_btn.setEnabled(False)
-        self.stop_btn.setStyleSheet("QPushButton { background: #ff3b30; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; } QPushButton:hover { background: #e0352b; } QPushButton:disabled { background: #ccc; }")
+        self.stop_btn.setStyleSheet("""
+            QPushButton { background: #ff3b30; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; }
+            QPushButton:hover { background: #e0352b; }
+            QPushButton:disabled { background: #ccc; }
+        """)
         self.stop_btn.clicked.connect(self.stop_compression)
-        bottom.addWidget(self.stop_btn)
+        bottom_row.addWidget(self.stop_btn)
+        
         self.start_btn = QPushButton(tr('start'))
         self.start_btn.setFixedSize(100, 32)
-        self.start_btn.setStyleSheet("QPushButton { background: #007AFF; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; } QPushButton:hover { background: #0066d6; } QPushButton:disabled { background: #ccc; }")
+        self.start_btn.setStyleSheet("""
+            QPushButton { background: #007AFF; border: none; border-radius: 6px; color: white; font-weight: 500; font-size: 13px; }
+            QPushButton:hover { background: #0066d6; }
+            QPushButton:disabled { background: #ccc; }
+        """)
         self.start_btn.clicked.connect(self.start_compression)
-        bottom.addWidget(self.start_btn)
-        layout.addLayout(bottom)
+        bottom_row.addWidget(self.start_btn)
         
-        # Initialize encoders
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(100, self.init_encoders)
-    
-    def init_encoders(self):
-        available = detect_available_encoders(self.encoders)
-        self.encoder_combo.clear()
-        self.encoder_combo.addItems(available)
-        if IS_MAC and tr('apple_h264') in available:
-            self.encoder_combo.setCurrentText(tr('apple_h264'))
-        elif IS_WIN and tr('nvidia') in available:
-            self.encoder_combo.setCurrentText(tr('nvidia'))
+        layout.addLayout(bottom_row)
     
     def switch_language(self, lang):
+        """切换语言"""
         LM.save_language(lang)
         QMessageBox.information(self, tr('hint'), tr('restart_hint'))
     
     def on_encoder_changed(self, name):
+        """编码器切换时更新提示"""
         if name in self.encoders:
-            enc = self.encoders[name]['encoder']
-            info_map = {'videotoolbox': tr('info_apple'), 'nvenc': tr('info_nvidia'), 'amf': tr('info_amd'), 'qsv': tr('info_intel'), 'libx265': tr('info_h265')}
-            self.encoder_info.setText(next((v for k, v in info_map.items() if k in enc), tr('info_cpu')))
-            self.speed_combo.setEnabled(self.encoders[name].get('has_preset', False))
+            cfg = self.encoders[name]
+            encoder = cfg['encoder']
+            if 'videotoolbox' in encoder:
+                self.encoder_info.setText(tr('info_apple'))
+            elif 'nvenc' in encoder:
+                self.encoder_info.setText(tr('info_nvidia'))
+            elif 'amf' in encoder:
+                self.encoder_info.setText(tr('info_amd'))
+            elif 'qsv' in encoder:
+                self.encoder_info.setText(tr('info_intel'))
+            elif 'libx265' in encoder:
+                self.encoder_info.setText(tr('info_h265'))
+            else:
+                self.encoder_info.setText(tr('info_cpu'))
+            
+            # 更新速度选项可用性
+            has_preset = cfg.get('has_preset', False)
+            self.speed_combo.setEnabled(has_preset)
+            if not has_preset:
+                self.speed_combo.setCurrentText(tr('balanced'))
+
+    def check_environment(self):
+        """检查环境"""
+        # 初始化编码器配置
+        self.encoders = get_encoders_config()
+        
+        ffmpeg = get_ffmpeg_path()
+        try:
+            kwargs = {'capture_output': True, 'timeout': 5}
+            if IS_WIN:
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            result = subprocess.run([ffmpeg, '-version'], **kwargs)
+            if result.returncode == 0:
+                self.status_indicator.setText(tr('ffmpeg_ready'))
+                self.status_indicator.setStyleSheet("font-size: 11px; color: #34c759;")
+                
+                # 检测可用编码器
+                self.available_encoders = detect_available_encoders(self.encoders)
+                self.encoder_combo.clear()
+                self.encoder_combo.addItems(self.available_encoders)
+                
+                # 默认选择推荐编码器
+                if IS_MAC and tr('apple_h264') in self.available_encoders:
+                    self.encoder_combo.setCurrentText(tr('apple_h264'))
+                elif IS_WIN and tr('nvidia') in self.available_encoders:
+                    self.encoder_combo.setCurrentText(tr('nvidia'))
+            else:
+                self._show_ffmpeg_error()
+        except Exception as e:
+            print(f"FFmpeg 检查失败: {e}")
+            self._show_ffmpeg_error()
+    
+    def _show_ffmpeg_error(self):
+        self.status_indicator.setText(tr('ffmpeg_not_found'))
+        self.status_indicator.setStyleSheet("font-size: 11px; color: #ff3b30;")
+        self.start_btn.setEnabled(False)
+        
+        msg = tr('ffmpeg_error_mac') if IS_MAC else tr('ffmpeg_error_win')
+        QMessageBox.warning(self, tr('missing_dep'), msg)
     
     def browse_output(self):
+        """选择输出目录"""
         folder = QFileDialog.getExistingDirectory(self, tr('select_output'))
-        if folder: self.output_edit.setText(folder)
+        if folder:
+            self.output_edit.setText(folder)
     
     def browse_files(self):
-        files, _ = QFileDialog.getOpenFileNames(self, tr('select_video'), "",
-            f"{tr('video_files')} (*.mp4 *.mkv *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.ts);;{tr('all_files')} (*)")
-        if files: self.add_files(files)
+        """选择文件"""
+        files, _ = QFileDialog.getOpenFileNames(
+            self, tr('select_video'), "",
+            f"{tr('video_files')} (*.mp4 *.mkv *.avi *.mov *.wmv *.flv *.webm *.m4v *.mpg *.mpeg *.ts);;{tr('all_files')} (*)"
+        )
+        if files:
+            self.add_files(files)
     
     def browse_folder(self):
+        """选择文件夹"""
         folder = QFileDialog.getExistingDirectory(self, tr('select_folder'))
         if folder:
             exts = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.ts'}
-            self.add_files([str(f) for f in Path(folder).rglob('*') if f.is_file() and f.suffix.lower() in exts])
+            files = []
+            for f in Path(folder).rglob('*'):
+                if f.is_file() and f.suffix.lower() in exts:
+                    files.append(str(f))
+            if files:
+                self.add_files(files)
     
     def add_files(self, paths):
+        """添加文件到列表"""
         existing = {f['path'] for f in self.files}
+        
         for p in paths:
-            if p in existing: continue
+            if p in existing:
+                continue
+            
             try:
-                size, name = os.path.getsize(p), os.path.basename(p)
-                self.files.append({'path': p, 'name': name, 'size': size})
+                size = os.path.getsize(p)
+                name = os.path.basename(p)
+                
+                self.files.append({
+                    'path': p,
+                    'name': name,
+                    'size': size
+                })
+                
                 row = self.table.rowCount()
                 self.table.insertRow(row)
-                item = QTableWidgetItem(name)
-                item.setToolTip(p)
-                self.table.setItem(row, 0, item)
-                for col, text in [(1, "..."), (2, self._fmt(size)), (4, "-"), (5, tr('waiting'))]:
-                    it = QTableWidgetItem(text)
-                    it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    if col == 5: it.setForeground(QColor("#666"))
-                    self.table.setItem(row, col, it)
-                pb = QProgressBar()
-                pb.setRange(0, 100)
-                pb.setTextVisible(True)
-                pb.setFormat("%p%")
-                pb.setStyleSheet("QProgressBar { border: none; border-radius: 3px; background: #e0e0e0; height: 16px; text-align: center; font-size: 11px; color: #333; } QProgressBar::chunk { background: #007AFF; border-radius: 3px; }")
-                self.table.setCellWidget(row, 3, pb)
-                w = VideoInfoWorker(row, p)
-                w.info_ready.connect(lambda r, d: self.table.item(r, 1).setText(d) if r < self.table.rowCount() else None)
-                self.info_workers.append(w)
-                w.start()
-            except: pass
-        self._update_count()
+                
+                # 文件名
+                name_item = QTableWidgetItem(name)
+                name_item.setToolTip(p)
+                self.table.setItem(row, 0, name_item)
+                
+                # 时长 (异步获取)
+                dur_item = QTableWidgetItem("...")
+                dur_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table.setItem(row, 1, dur_item)
+                
+                # 大小
+                size_item = QTableWidgetItem(self.fmt(size))
+                size_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table.setItem(row, 2, size_item)
+                
+                # 进度
+                progress_bar = QProgressBar()
+                progress_bar.setRange(0, 100)
+                progress_bar.setValue(0)
+                progress_bar.setTextVisible(True)
+                progress_bar.setFormat("%p%")
+                progress_bar.setStyleSheet("""
+                    QProgressBar { border: none; border-radius: 3px; background: #e0e0e0; height: 16px; text-align: center; font-size: 11px; color: #333; }
+                    QProgressBar::chunk { background: #007AFF; border-radius: 3px; }
+                """)
+                self.table.setCellWidget(row, 3, progress_bar)
+                
+                # 压缩后大小
+                out_item = QTableWidgetItem("-")
+                out_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table.setItem(row, 4, out_item)
+                
+                # 状态
+                status_item = QTableWidgetItem(tr('waiting'))
+                status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                status_item.setForeground(QColor("#666"))
+                self.table.setItem(row, 5, status_item)
+                
+                # 异步获取时长
+                worker = VideoInfoWorker(row, p)
+                worker.info_ready.connect(self.on_video_info)
+                self.info_workers.append(worker)
+                worker.start()
+                
+            except Exception as e:
+                print(f"添加文件失败: {e}")
+        
+        self.update_count()
+    
+    def on_video_info(self, row, duration):
+        """更新视频时长"""
+        if row < self.table.rowCount():
+            item = self.table.item(row, 1)
+            if item:
+                item.setText(duration)
     
     def remove_selected(self):
-        for row in sorted(set(i.row() for i in self.table.selectedIndexes()), reverse=True):
-            if row < len(self.files): del self.files[row]
+        """移除选中的文件"""
+        rows = sorted(set(idx.row() for idx in self.table.selectedIndexes()), reverse=True)
+        for row in rows:
+            if row < len(self.files):
+                del self.files[row]
             self.table.removeRow(row)
-        self._update_count()
+        self.update_count()
     
     def clear_files(self):
+        """清空文件列表"""
         self.files.clear()
         self.table.setRowCount(0)
-        self._update_count()
+        self.update_count()
     
-    def _update_count(self):
-        self.file_count_label.setText(tr('file_count', len(self.files), self._fmt(sum(f['size'] for f in self.files))))
+    def update_count(self):
+        """更新文件计数"""
+        count = len(self.files)
+        total_size = sum(f['size'] for f in self.files)
+        lang = get_lang()
+        if lang == 'zh':
+            self.file_count_label.setText(f"共 {count} 个文件，{self.fmt(total_size)}")
+        else:
+            self.file_count_label.setText(f"{count} files, {self.fmt(total_size)}")
     
-    def _fmt(self, size):
-        for u in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if size < 1024: return f"{size:.1f} {u}"
+    def fmt(self, size):
+        """格式化文件大小"""
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size < 1024:
+                return f"{size:.1f} {unit}"
             size /= 1024
         return f"{size:.1f} PB"
-    
+
     def start_compression(self):
+        """开始压缩"""
         if not self.files:
             QMessageBox.information(self, tr('hint'), tr('add_files_first'))
             return
-        settings = {'encoder_name': self.encoder_combo.currentText(), 'quality': self.quality_combo.currentText(),
-                    'speed': self.speed_combo.currentText(), 'resolution': self.resolution_combo.currentText(),
-                    'output_dir': self.output_edit.text() or None}
+        
+        settings = {
+            'encoder_name': self.encoder_combo.currentText(),
+            'quality': self.quality_combo.currentText(),
+            'speed': self.speed_combo.currentText(),
+            'resolution': self.resolution_combo.currentText(),
+            'output_dir': self.output_edit.text() or None
+        }
+        
+        # 重置状态
         for row in range(self.table.rowCount()):
-            pb = self.table.cellWidget(row, 3)
-            if pb: pb.setValue(0)
-            for col, text in [(4, "-"), (5, tr('waiting'))]:
-                it = self.table.item(row, col)
-                if it: it.setText(text); it.setForeground(QColor("#666")) if col == 5 else None
+            progress_bar = self.table.cellWidget(row, 3)
+            if progress_bar:
+                progress_bar.setValue(0)
+                progress_bar.setStyleSheet("""
+                    QProgressBar { border: none; border-radius: 3px; background: #e0e0e0; height: 16px; text-align: center; font-size: 11px; color: #333; }
+                    QProgressBar::chunk { background: #007AFF; border-radius: 3px; }
+                """)
+            
+            out_item = self.table.item(row, 4)
+            if out_item:
+                out_item.setText("-")
+            
+            status_item = self.table.item(row, 5)
+            if status_item:
+                status_item.setText(tr('waiting'))
+                status_item.setForeground(QColor("#666"))
+        
         self.total_progress.setValue(0)
         self.progress_label.setText(tr('preparing'))
+        
+        # 禁用控件
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
-        for c in [self.encoder_combo, self.quality_combo, self.speed_combo, self.resolution_combo]: c.setEnabled(False)
+        self.encoder_combo.setEnabled(False)
+        self.quality_combo.setEnabled(False)
+        self.speed_combo.setEnabled(False)
+        self.resolution_combo.setEnabled(False)
+        
+        # 启动工作线程
         self.worker = CompressionWorker(self.files.copy(), settings, self.encoders)
-        self.worker.progress.connect(self._on_progress)
-        self.worker.file_done.connect(self._on_file_done)
-        self.worker.all_done.connect(self._on_all_done)
-        self.worker.error.connect(lambda m: QMessageBox.warning(self, tr('error'), m))
+        self.worker.progress.connect(self.on_progress)
+        self.worker.file_done.connect(self.on_file_done)
+        self.worker.all_done.connect(self.on_all_done)
+        self.worker.error.connect(lambda msg: QMessageBox.warning(self, tr('error'), msg))
         self.worker.start()
     
     def stop_compression(self):
-        if self.worker: self.worker.stop(); self.progress_label.setText(tr('stopping'))
+        """停止压缩"""
+        if self.worker:
+            self.worker.stop()
+            self.progress_label.setText(tr('stopping'))
     
-    def _on_progress(self, idx, pct, status):
-        if idx < self.table.rowCount():
-            pb = self.table.cellWidget(idx, 3)
-            if pb: pb.setValue(pct)
-            it = self.table.item(idx, 5)
-            if it: it.setText(status); it.setForeground(QColor("#007AFF"))
+    def on_progress(self, index, percent, status):
+        """更新进度"""
+        if index < self.table.rowCount():
+            progress_bar = self.table.cellWidget(index, 3)
+            if progress_bar:
+                progress_bar.setValue(percent)
+            
+            status_item = self.table.item(index, 5)
+            if status_item:
+                status_item.setText(status)
+                status_item.setForeground(QColor("#007AFF"))
+        
+        # 更新总进度
         total = len(self.files)
-        if total: self.total_progress.setValue(int((idx * 100 + pct) / total)); self.progress_label.setText(tr('processing', idx + 1, total))
+        if total > 0:
+            overall = int((index * 100 + percent) / total)
+            self.total_progress.setValue(overall)
+            lang = get_lang()
+            if lang == 'zh':
+                self.progress_label.setText(f"处理中 {index + 1}/{total}")
+            else:
+                self.progress_label.setText(f"Processing {index + 1}/{total}")
     
-    def _on_file_done(self, idx, ok, out_size):
-        if idx >= self.table.rowCount(): return
-        pb, st, out = self.table.cellWidget(idx, 3), self.table.item(idx, 5), self.table.item(idx, 4)
-        if ok:
-            if pb: pb.setValue(100)
-            if out: out.setText(self._fmt(out_size))
-            if st:
-                diff = self.files[idx]['size'] - out_size
-                ratio = abs(diff) / self.files[idx]['size'] * 100 if self.files[idx]['size'] else 0
-                st.setText(f"-{ratio:.0f}%" if diff > 0 else f"+{ratio:.0f}%")
-                st.setForeground(QColor("#34c759" if diff > 0 else "#ff9500"))
-        else:
-            if pb: pb.setValue(0); pb.setStyleSheet("QProgressBar { border: none; border-radius: 3px; background: #ffe0e0; height: 16px; text-align: center; font-size: 11px; color: #333; } QProgressBar::chunk { background: #ff3b30; border-radius: 3px; }")
-            if st: st.setText(tr('failed')); st.setForeground(QColor("#ff3b30"))
+    def on_file_done(self, index, success, output_size):
+        """单个文件完成"""
+        if index < self.table.rowCount():
+            progress_bar = self.table.cellWidget(index, 3)
+            status_item = self.table.item(index, 5)
+            out_item = self.table.item(index, 4)
+            
+            if success:
+                if progress_bar:
+                    progress_bar.setValue(100)
+                
+                if out_item:
+                    out_item.setText(self.fmt(output_size))
+                
+                if status_item:
+                    # 计算压缩比
+                    in_size = self.files[index]['size']
+                    diff = in_size - output_size
+                    if in_size > 0:
+                        ratio = abs(diff) / in_size * 100
+                        if diff > 0:
+                            status_item.setText(f"-{ratio:.0f}%")
+                            status_item.setForeground(QColor("#34c759"))
+                        else:
+                            status_item.setText(f"+{ratio:.0f}%")
+                            status_item.setForeground(QColor("#ff9500"))
+                    else:
+                        status_item.setText("OK")
+                        status_item.setForeground(QColor("#34c759"))
+            else:
+                if progress_bar:
+                    progress_bar.setValue(0)
+                    progress_bar.setStyleSheet("""
+                        QProgressBar { border: none; border-radius: 3px; background: #ffe0e0; height: 16px; text-align: center; font-size: 11px; color: #333; }
+                        QProgressBar::chunk { background: #ff3b30; border-radius: 3px; }
+                    """)
+                
+                if status_item:
+                    status_item.setText(tr('failed'))
+                    status_item.setForeground(QColor("#ff3b30"))
     
-    def _on_all_done(self, completed, total, in_size, out_size):
+    def on_all_done(self, completed, total, input_size, output_size):
+        """全部完成"""
         self.total_progress.setValue(100)
-        self.progress_label.setText(tr('done', completed, total))
+        lang = get_lang()
+        if lang == 'zh':
+            self.progress_label.setText(f"完成 {completed}/{total}")
+        else:
+            self.progress_label.setText(f"Done {completed}/{total}")
+        
+        # 恢复控件
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
-        for c in [self.encoder_combo, self.quality_combo, self.resolution_combo]: c.setEnabled(True)
-        if self.encoder_combo.currentText() in self.encoders:
-            self.speed_combo.setEnabled(self.encoders[self.encoder_combo.currentText()].get('has_preset', False))
-        if completed: ResultDialog(self, completed, total, in_size, out_size).exec()
+        self.encoder_combo.setEnabled(True)
+        self.quality_combo.setEnabled(True)
+        
+        enc_name = self.encoder_combo.currentText()
+        if enc_name in self.encoders:
+            has_preset = self.encoders[enc_name].get('has_preset', False)
+            self.speed_combo.setEnabled(has_preset)
+        
+        self.resolution_combo.setEnabled(True)
+        
+        # 显示结果弹窗
+        if completed > 0:
+            dialog = ResultDialog(self, completed, total, input_size, output_size)
+            dialog.exec()
 
 
+# ============ 主函数 ============
 def main():
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
     app.setApplicationName(tr('app_title'))
     app.setOrganizationName("SheCan")
+    
     window = MainWindow()
     window.show()
+    
     sys.exit(app.exec())
+
 
 if __name__ == '__main__':
     main()
