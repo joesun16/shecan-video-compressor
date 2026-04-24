@@ -38,7 +38,19 @@ jobs:
     - name: Verify build
       run: |
         Test-Path "dist\EllaPuede视频压缩工具\EllaPuede视频压缩工具.exe"
-        Test-Path "dist\EllaPuede视频压缩工具\ffmpeg\ffmpeg.exe"
+        # --add-data puts files in _internal/ for --onedir mode
+        if (Test-Path "dist\EllaPuede视频压缩工具\_internal\ffmpeg\ffmpeg.exe") {
+          echo "FFmpeg found in _internal"
+        } elseif (Test-Path "dist\EllaPuede视频压缩工具\ffmpeg\ffmpeg.exe") {
+          echo "FFmpeg found in root"
+        } else {
+          echo "FFmpeg NOT found - copying manually"
+          Copy-Item -Path "ffmpeg" -Destination "dist\EllaPuede视频压缩工具\ffmpeg" -Recurse
+        }
+        # Also ensure ffmpeg is next to exe as fallback
+        if (!(Test-Path "dist\EllaPuede视频压缩工具\ffmpeg\ffmpeg.exe")) {
+          Copy-Item -Path "ffmpeg" -Destination "dist\EllaPuede视频压缩工具\ffmpeg" -Recurse
+        }
 
     - name: Build Installer
       uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
