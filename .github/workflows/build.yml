@@ -40,7 +40,6 @@ jobs:
         if (!(Test-Path "dist\EllaPuede视频压缩工具\ffmpeg\ffmpeg.exe")) {
           Copy-Item -Path "ffmpeg" -Destination "dist\EllaPuede视频压缩工具\ffmpeg" -Recurse
         }
-        echo "FFmpeg verified"
 
     - name: Build Installer
       uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
@@ -53,8 +52,104 @@ jobs:
         name: Windows-Installer
         path: installer_output/*.exe
 
+  build-macos:
+    runs-on: macos-14
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install dependencies
+      run: pip install PyQt6 pyinstaller
+
+    - name: Download FFmpeg
+      run: |
+        mkdir -p ffmpeg
+        curl -L "https://evermeet.cx/ffmpeg/getrelease/zip" -o ffmpeg.zip
+        unzip ffmpeg.zip -d ffmpeg/
+        curl -L "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip" -o ffprobe.zip
+        unzip ffprobe.zip -d ffmpeg/
+        chmod +x ffmpeg/ffmpeg ffmpeg/ffprobe
+        rm -f ffmpeg.zip ffprobe.zip
+        ./ffmpeg/ffmpeg -version
+
+    - name: Build macOS app
+      run: |
+        # Use --onefile to avoid Qt framework bundle structure issues
+        pyinstaller --name="EllaPuede视频压缩工具" \
+          --windowed \
+          --onefile \
+          --noconfirm \
+          --clean \
+          --icon=icon.icns \
+          --osx-bundle-identifier="com.ellapuede.videocompressor" \
+          video_compressor.py
+
+    - name: Prepare app bundle
+      run: |
+        APP="dist/EllaPuede视频压缩工具.app"
+
+        # Copy FFmpeg into Resources
+        mkdir -p "$APP/Contents/Resources/ffmpeg"
+        cp ffmpeg/ffmpeg "$APP/Contents/Resources/ffmpeg/"
+        cp ffmpeg/ffprobe "$APP/Contents/Resources/ffmpeg/"
+        chmod +x "$APP/Contents/Resources/ffmpeg/ffmpeg"
+        chmod +x "$APP/Contents/Resources/ffmpeg/ffprobe"
+
+        # Fix Info.plist
+        PLIST="$APP/Contents/Info.plist"
+        /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 3.0" "$PLIST" 2>/dev/null || true
+        /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 3.0.8" "$PLIST" 2>/dev/null || true
+        /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string EllaPuede视频压缩工具" "$PLIST" 2>/dev/null || true
+        /usr/libexec/PlistBuddy -c "Add :NSHighResolutionCapable bool true" "$PLIST" 2>/dev/null || true
+
+        # Re-sign
+        codesign --force --deep --sign - "$APP"
+
+        # Verify contents
+        echo "=== Info.plist ==="
+        /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST"
+        /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST"
+        echo "=== FFmpeg ==="
+        ls -la "$APP/Contents/Resources/ffmpeg/"
+        echo "=== MacOS ==="
+        ls -la "$APP/Contents/MacOS/"
+
+    - name: Smoke test
+      run: |
+        APP="dist/EllaPuede视频压缩工具.app"
+        "$APP/Contents/MacOS/EllaPuede视频压缩工具" &
+        APP_PID=$!
+        sleep 5
+        if kill -0 $APP_PID 2>/dev/null; then
+          echo "SUCCESS: App launched and running"
+          kill $APP_PID
+        else
+          echo "FAILED: App crashed on launch"
+          # Show crash log if available
+          find ~/Library/Logs/DiagnosticReports -name "*EllaPuede*" -newer "$APP" 2>/dev/null | head -1 | xargs cat 2>/dev/null | tail -30
+          exit 1
+        fi
+
+    - name: Create DMG
+      run: |
+        mkdir -p dmg_contents
+        cp -r "dist/EllaPuede视频压缩工具.app" dmg_contents/
+        ln -s /Applications dmg_contents/Applications
+        hdiutil create -volname "EllaPuede视频压缩工具" -srcfolder dmg_contents -ov -format UDZO "EllaPuede视频压缩工具_macOS.dmg"
+        ls -lh "EllaPuede视频压缩工具_macOS.dmg"
+
+    - name: Upload macOS DMG
+      uses: actions/upload-artifact@v4
+      with:
+        name: macOS-DMG
+        path: "*.dmg"
+
   release:
-    needs: [build-windows]
+    needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -66,6 +161,12 @@ jobs:
         name: Windows-Installer
         path: ./release
 
+    - name: Download macOS DMG
+      uses: actions/download-artifact@v4
+      with:
+        name: macOS-DMG
+        path: ./release
+
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
@@ -74,8 +175,10 @@ jobs:
           ## EllaPuede 视频压缩工具 V3.0
 
           ### 下载
-          - **Windows**: 下载下方 `.exe` 安装包，双击安装即可
-          - **macOS**: 请从 [这里下载 DMG](https://github.com/joesun16/shecan-video-compressor/releases) (手动上传)
+          - **Windows**: 下载 `EllaPuede视频压缩工具_Setup.exe`，双击安装
+          - **macOS**: 下载 `EllaPuede视频压缩工具_macOS.dmg`，打开后拖到 Applications
+
+          FFmpeg 已内置，安装即用，无需额外配置。
 
           ### V3.0 更新内容
           - 品牌更名：SheCan → EllaPuede
@@ -85,4 +188,4 @@ jobs:
           - 动态码率：GPU 编码根据分辨率自动计算
           - 内置参数指南
           - 即时语言切换（无需重启）
-          - FFmpeg 内置，安装即用
+          - 右键菜单 + Delete 键删除文件
