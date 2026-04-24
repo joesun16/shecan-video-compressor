@@ -453,9 +453,11 @@ def get_ffmpeg_path():
 def get_ffprobe_path():
     """获取 FFprobe 路径"""
     ffmpeg = get_ffmpeg_path()
+    # 只替换最后一个 ffmpeg（文件名），不替换目录名中的 ffmpeg
+    dir_name = os.path.dirname(ffmpeg)
     if IS_WIN:
-        return ffmpeg.replace('ffmpeg.exe', 'ffprobe.exe')
-    return ffmpeg.replace('ffmpeg', 'ffprobe')
+        return os.path.join(dir_name, 'ffprobe.exe')
+    return os.path.join(dir_name, 'ffprobe')
 
 
 def _subprocess_kwargs(capture=True, text=True, timeout=None):
