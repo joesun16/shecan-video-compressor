@@ -1447,6 +1447,13 @@ class MainWindow(QMainWindow):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
+        # 右键菜单
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_table_menu)
+        # Delete/Backspace 快捷键删除
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        QShortcut(QKeySequence.StandardKey.Delete, self.table, self.remove_selected)
+        QShortcut(QKeySequence(Qt.Key.Key_Backspace), self.table, self.remove_selected)
         layout.addWidget(self.table, 1)
 
         # 底部进度和按钮
@@ -1670,6 +1677,25 @@ class MainWindow(QMainWindow):
                 logger.warning(f"Failed to add file {p}: {e}")
 
         self.update_count()
+
+    def _show_table_menu(self, pos):
+        """右键菜单"""
+        if self._is_compressing:
+            return
+        from PyQt6.QtWidgets import QMenu
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu { background: white; border: 1px solid #d2d2d7; border-radius: 6px; padding: 4px 0; }
+            QMenu::item { padding: 6px 20px; font-size: 13px; color: #333; }
+            QMenu::item:selected { background: #007AFF; color: white; border-radius: 4px; margin: 0 4px; }
+        """)
+        selected = self.table.selectedIndexes()
+        if selected:
+            remove_action = menu.addAction(tr('remove_selected'))
+            remove_action.triggered.connect(self.remove_selected)
+        clear_action = menu.addAction(tr('clear_list'))
+        clear_action.triggered.connect(self.clear_files)
+        menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def remove_selected(self):
         if self._is_compressing:
