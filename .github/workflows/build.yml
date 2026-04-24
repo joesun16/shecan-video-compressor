@@ -35,22 +35,12 @@ jobs:
       run: |
         pyinstaller --name="EllaPuede视频压缩工具" --windowed --onedir --noconfirm --clean --icon=icon.ico --add-data "ffmpeg;ffmpeg" video_compressor.py
 
-    - name: Verify build
+    - name: Ensure FFmpeg next to exe
       run: |
-        Test-Path "dist\EllaPuede视频压缩工具\EllaPuede视频压缩工具.exe"
-        # --add-data puts files in _internal/ for --onedir mode
-        if (Test-Path "dist\EllaPuede视频压缩工具\_internal\ffmpeg\ffmpeg.exe") {
-          echo "FFmpeg found in _internal"
-        } elseif (Test-Path "dist\EllaPuede视频压缩工具\ffmpeg\ffmpeg.exe") {
-          echo "FFmpeg found in root"
-        } else {
-          echo "FFmpeg NOT found - copying manually"
-          Copy-Item -Path "ffmpeg" -Destination "dist\EllaPuede视频压缩工具\ffmpeg" -Recurse
-        }
-        # Also ensure ffmpeg is next to exe as fallback
         if (!(Test-Path "dist\EllaPuede视频压缩工具\ffmpeg\ffmpeg.exe")) {
           Copy-Item -Path "ffmpeg" -Destination "dist\EllaPuede视频压缩工具\ffmpeg" -Recurse
         }
+        echo "FFmpeg verified"
 
     - name: Build Installer
       uses: Minionguyjpro/Inno-Setup-Action@v1.2.4
@@ -63,163 +53,8 @@ jobs:
         name: Windows-Installer
         path: installer_output/*.exe
 
-    - name: Upload Portable Version
-      uses: actions/upload-artifact@v4
-      with:
-        name: Windows-Portable
-        path: dist/EllaPuede视频压缩工具/
-
-  build-macos:
-    runs-on: macos-14
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.13'
-
-    - name: Install dependencies
-      run: pip install PyQt6 pyinstaller
-
-    - name: Download FFmpeg
-      run: |
-        mkdir -p ffmpeg
-        curl -L "https://evermeet.cx/ffmpeg/getrelease/zip" -o ffmpeg.zip
-        unzip ffmpeg.zip -d ffmpeg/
-        curl -L "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip" -o ffprobe.zip
-        unzip ffprobe.zip -d ffmpeg/
-        chmod +x ffmpeg/ffmpeg ffmpeg/ffprobe
-        rm -f ffmpeg.zip ffprobe.zip
-        ./ffmpeg/ffmpeg -version
-
-    - name: Build with PyInstaller
-      run: |
-        pyinstaller --name="EllaPuede视频压缩工具" \
-          --windowed \
-          --onedir \
-          --noconfirm \
-          --clean \
-          --icon=icon.icns \
-          --osx-bundle-identifier="com.ellapuede.videocompressor" \
-          video_compressor.py
-
-    - name: Bundle FFmpeg and fix app bundle
-      run: |
-        APP="dist/EllaPuede视频压缩工具.app"
-        
-        # Copy FFmpeg into Resources
-        cp -r ffmpeg "$APP/Contents/Resources/"
-        
-        # Fix Info.plist
-        PLIST="$APP/Contents/Info.plist"
-        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 3.0" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 3.0" "$PLIST"
-        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 3.0.4" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 3.0.4" "$PLIST"
-        /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName EllaPuede视频压缩工具" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string EllaPuede视频压缩工具" "$PLIST"
-        /usr/libexec/PlistBuddy -c "Set :NSHighResolutionCapable true" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :NSHighResolutionCapable bool true" "$PLIST"
-        
-        # Fix Qt framework bundles — add Info.plist to each .framework
-        # This prevents CFBundleCopyBundleURL crash on macOS
-        for fw in "$APP/Contents/Frameworks/"Qt*.framework; do
-          if [ -d "$fw" ]; then
-            FW_NAME=$(basename "$fw" .framework)
-            FW_PLIST="$fw/Resources/Info.plist"
-            mkdir -p "$fw/Resources"
-            if [ ! -f "$FW_PLIST" ]; then
-              cat > "$FW_PLIST" << EOF
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-          <key>CFBundleIdentifier</key>
-          <string>org.qt-project.${FW_NAME}</string>
-          <key>CFBundleName</key>
-          <string>${FW_NAME}</string>
-          <key>CFBundleVersion</key>
-          <string>6.0</string>
-          <key>CFBundleShortVersionString</key>
-          <string>6.0</string>
-          <key>CFBundlePackageType</key>
-          <string>FMWK</string>
-        </dict>
-        </plist>
-        EOF
-              echo "Created Info.plist for $FW_NAME"
-            fi
-          fi
-        done
-        
-        # Also fix Qt .framework dirs that are just dylibs (PyInstaller flattens them)
-        # Create proper framework structure for QtCore if it's just a dylib
-        for dylib in "$APP/Contents/Frameworks/"Qt*; do
-          if [ -f "$dylib" ] && [ ! -d "$dylib" ]; then
-            DYLIB_NAME=$(basename "$dylib")
-            FW_DIR="$APP/Contents/Frameworks/${DYLIB_NAME}.framework"
-            if [ ! -d "$FW_DIR" ]; then
-              mkdir -p "$FW_DIR/Versions/A/Resources"
-              mv "$dylib" "$FW_DIR/Versions/A/${DYLIB_NAME}"
-              ln -sf "Versions/A/${DYLIB_NAME}" "$FW_DIR/${DYLIB_NAME}"
-              ln -sf "Versions/A/Resources" "$FW_DIR/Resources"
-              ln -sf "A" "$FW_DIR/Versions/Current"
-              cat > "$FW_DIR/Versions/A/Resources/Info.plist" << EOF
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-          <key>CFBundleIdentifier</key>
-          <string>org.qt-project.${DYLIB_NAME}</string>
-          <key>CFBundleName</key>
-          <string>${DYLIB_NAME}</string>
-          <key>CFBundleVersion</key>
-          <string>6.0</string>
-          <key>CFBundleShortVersionString</key>
-          <string>6.0</string>
-          <key>CFBundlePackageType</key>
-          <string>FMWK</string>
-        </dict>
-        </plist>
-        EOF
-              echo "Restructured $DYLIB_NAME as framework"
-            fi
-          fi
-        done
-        
-        # Verify
-        /usr/libexec/PlistBuddy -c "Print" "$PLIST"
-        ls -la "$APP/Contents/Resources/ffmpeg/"
-
-    - name: Re-sign app
-      run: |
-        codesign --force --deep --sign - "dist/EllaPuede视频压缩工具.app"
-
-    - name: Test app launches
-      run: |
-        "dist/EllaPuede视频压缩工具.app/Contents/MacOS/EllaPuede视频压缩工具" &
-        APP_PID=$!
-        sleep 5
-        if kill -0 $APP_PID 2>/dev/null; then
-          echo "App launched successfully"
-          kill $APP_PID
-        else
-          echo "App crashed on launch!"
-          exit 1
-        fi
-
-    - name: Create DMG
-      run: |
-        mkdir -p dmg_contents
-        cp -r "dist/EllaPuede视频压缩工具.app" dmg_contents/
-        ln -s /Applications dmg_contents/Applications
-        hdiutil create -volname "EllaPuede视频压缩工具" -srcfolder dmg_contents -ov -format UDZO "EllaPuede视频压缩工具_macOS.dmg"
-
-    - name: Upload macOS DMG
-      uses: actions/upload-artifact@v4
-      with:
-        name: macOS-DMG
-        path: "*.dmg"
-
   release:
-    needs: [build-windows, build-macos]
+    needs: [build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -231,14 +66,23 @@ jobs:
         name: Windows-Installer
         path: ./release
 
-    - name: Download macOS DMG
-      uses: actions/download-artifact@v4
-      with:
-        name: macOS-DMG
-        path: ./release
-
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
         files: ./release/*
-        generate_release_notes: true
+        body: |
+          ## EllaPuede 视频压缩工具 V3.0
+
+          ### 下载
+          - **Windows**: 下载下方 `.exe` 安装包，双击安装即可
+          - **macOS**: 请从 [这里下载 DMG](https://github.com/joesun16/shecan-video-compressor/releases) (手动上传)
+
+          ### V3.0 更新内容
+          - 品牌更名：SheCan → EllaPuede
+          - 并行压缩：可同时处理多个文件
+          - 极致压缩 + 360p 分辨率
+          - 智能音频：低码率 AAC 自动跳过重编码
+          - 动态码率：GPU 编码根据分辨率自动计算
+          - 内置参数指南
+          - 即时语言切换（无需重启）
+          - FFmpeg 内置，安装即用
