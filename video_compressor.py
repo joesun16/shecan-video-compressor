@@ -529,7 +529,7 @@ if IS_WIN:
         'preset_map': {'fast': 'fast', 'balanced': 'medium', 'high_compress': 'slow'},
         'is_gpu': True,
         'info_key': 'info_nvidia',
-        'extra_params': ['-rc', 'vbr'],
+        'extra_params': ['-rc', 'vbr_hq'],
     }
     ENCODER_CONFIGS['amd'] = {
         'encoder': 'h264_amf',
@@ -913,8 +913,12 @@ class CompressionWorker(QThread):
             cmd.extend(['-c:a', 'aac', '-b:a', f'{target_audio_bitrate // 1000}k'])
 
         # 流选择 + 通用参数
+        # 只有 probe 成功时才用 -map 精确选择流，否则让 FFmpeg 自动选
+        if info.get('height') or info.get('audio_codec'):
+            cmd.extend(['-map', '0:v:0'])
+            if info.get('audio_codec'):
+                cmd.extend(['-map', '0:a:0'])
         cmd.extend([
-            '-map', '0:v:0', '-map', '0:a:0?',
             '-threads', str(threads_per_job),
             '-max_muxing_queue_size', '1024',
             '-movflags', '+faststart',
@@ -924,6 +928,7 @@ class CompressionWorker(QThread):
         logger.info(f"Compressing [{index}]: {' '.join(cmd)}")
 
         process = None
+        stderr_lines = []
         try:
             kwargs = {'stderr': subprocess.PIPE, 'universal_newlines': True}
             if IS_WIN:
@@ -934,6 +939,7 @@ class CompressionWorker(QThread):
                 self._processes[index] = process
 
             for line in process.stderr:
+                stderr_lines.append(line.rstrip())
                 with self._lock:
                     if self._should_stop:
                         process.terminate()
@@ -951,7 +957,6 @@ class CompressionWorker(QThread):
             with self._lock:
                 self._processes.pop(index, None)
                 if self._should_stop:
-                    # 清理不完整的输出文件
                     self._cleanup_file(out_path)
                     self.progress.emit(index, 0, tr('cancelled'))
                     return
@@ -981,8 +986,8 @@ class CompressionWorker(QThread):
                     self.file_done.emit(index, False, 0)
             else:
                 self._cleanup_file(out_path)
-                # 记录 FFmpeg 错误
-                logger.error(f"FFmpeg failed for [{index}], returncode={process.returncode if process else 'N/A'}")
+                stderr_tail = '\n'.join(stderr_lines[-10:])
+                logger.error(f"FFmpeg failed for [{index}], returncode={process.returncode if process else 'N/A'}\n{stderr_tail}")
                 with self._lock:
                     self._failed += 1
                 self.file_done.emit(index, False, 0)
