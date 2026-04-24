@@ -6,3 +6,8 @@ dist/
 .DS_Store
 *.iconset/
 icon_*.png
+installer_output/
+ffmpeg/
+ffmpeg.zip
+ffprobe.zip
+dmg_contents/
