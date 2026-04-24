@@ -502,12 +502,11 @@ if IS_MAC:
     ENCODER_CONFIGS['apple_h264'] = {
         'encoder': 'h264_videotoolbox',
         'quality_param': '-b:v',
-        'quality_map': 'dynamic',  # 动态码率
+        'quality_map': 'dynamic',
         'has_preset': False,
         'preset_map': {},
         'is_gpu': True,
         'info_key': 'info_apple',
-        'extra_params': ['-realtime', '0', '-allow_sw', '1'],
     }
     ENCODER_CONFIGS['apple_h265'] = {
         'encoder': 'hevc_videotoolbox',
@@ -517,7 +516,6 @@ if IS_MAC:
         'preset_map': {},
         'is_gpu': True,
         'info_key': 'info_apple',
-        'extra_params': ['-realtime', '0', '-allow_sw', '1'],
     }
 
 if IS_WIN:
@@ -529,7 +527,6 @@ if IS_WIN:
         'preset_map': {'fast': 'fast', 'balanced': 'medium', 'high_compress': 'slow'},
         'is_gpu': True,
         'info_key': 'info_nvidia',
-        'extra_params': ['-rc', 'vbr_hq'],
     }
     ENCODER_CONFIGS['amd'] = {
         'encoder': 'h264_amf',
@@ -871,7 +868,7 @@ class CompressionWorker(QThread):
         res_setting = self.settings.get('resolution')
         target_height = res_setting if isinstance(res_setting, int) else input_height
 
-        # 构建 FFmpeg 命令
+        # 构建 FFmpeg 命令（保持简洁，兼容所有平台和编码器）
         cmd = [ffmpeg, '-i', in_path]
 
         # 视频编码器
@@ -886,23 +883,21 @@ class CompressionWorker(QThread):
             q_val = enc_cfg['quality_map'].get(quality_key, '23')
             cmd.extend([enc_cfg['quality_param'], q_val])
 
-        # preset
+        # preset（仅支持 preset 的编码器）
         if enc_cfg.get('has_preset') and enc_cfg.get('preset_map'):
             preset = enc_cfg['preset_map'].get(speed_key, 'medium')
             cmd.extend(['-preset', preset])
 
-        # 编码器特有参数
-        if enc_cfg.get('extra_params'):
-            cmd.extend(enc_cfg['extra_params'])
-
-        # 视频滤镜：分辨率 + 像素格式
-        vf_parts = []
+        # 视频滤镜：仅在需要缩放时添加
+        # 硬件编码器不加 format=yuv420p（它们自己处理像素格式）
+        is_gpu = enc_cfg.get('is_gpu', False)
         if isinstance(res_setting, int):
-            vf_parts.append(f'scale=-2:{res_setting}')
-        vf_parts.append('format=yuv420p')
-        cmd.extend(['-vf', ','.join(vf_parts)])
+            cmd.extend(['-vf', f'scale=-2:{res_setting}'])
+        elif not is_gpu:
+            # 仅 CPU 编码器加像素格式转换，确保兼容性
+            cmd.extend(['-pix_fmt', 'yuv420p'])
 
-        # 音频处理：智能决定 copy 还是重编码
+        # 音频处理
         audio_codec = info.get('audio_codec', '')
         audio_bitrate = info.get('audio_bitrate', 0)
         target_audio_bitrate = 48000 if quality_key == 'extreme' else 128000
@@ -912,15 +907,9 @@ class CompressionWorker(QThread):
         else:
             cmd.extend(['-c:a', 'aac', '-b:a', f'{target_audio_bitrate // 1000}k'])
 
-        # 流选择 + 通用参数
-        # 只有 probe 成功时才用 -map 精确选择流，否则让 FFmpeg 自动选
-        if info.get('height') or info.get('audio_codec'):
-            cmd.extend(['-map', '0:v:0'])
-            if info.get('audio_codec'):
-                cmd.extend(['-map', '0:a:0'])
+        # 通用参数（不用 -map，让 FFmpeg 自动选择流，兼容性最好）
         cmd.extend([
             '-threads', str(threads_per_job),
-            '-max_muxing_queue_size', '1024',
             '-movflags', '+faststart',
             '-y', out_path
         ])
