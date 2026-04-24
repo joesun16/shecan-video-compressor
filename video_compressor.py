@@ -403,11 +403,13 @@ def tr(key):
 # ============ FFmpeg 路径 ============
 def get_ffmpeg_path():
     """获取 FFmpeg 路径 - 优先使用内置版本"""
+    # macOS: PyInstaller .app bundle 或 py2app
     if IS_MAC:
         if getattr(sys, 'frozen', False):
             exe_path = sys.executable
         else:
             exe_path = os.path.abspath(sys.argv[0] if sys.argv[0] else __file__)
+        # PyInstaller .app: executable is in .app/Contents/MacOS/
         if '.app/Contents/' in exe_path:
             parts = exe_path.split('.app/Contents/')
             if len(parts) >= 2:
@@ -415,12 +417,30 @@ def get_ffmpeg_path():
                 bundled = os.path.join(contents_dir, 'Resources', 'ffmpeg', 'ffmpeg')
                 if os.path.exists(bundled):
                     return bundled
+        # PyInstaller --onedir (not .app): check _MEIPASS
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            bundled = os.path.join(sys._MEIPASS, 'ffmpeg', 'ffmpeg')
+            if os.path.exists(bundled):
+                return bundled
+        # Also check next to the executable
+        if getattr(sys, 'frozen', False):
+            bundled = os.path.join(os.path.dirname(sys.executable), 'ffmpeg', 'ffmpeg')
+            if os.path.exists(bundled):
+                return bundled
 
-    if IS_WIN and getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        bundled = os.path.join(sys._MEIPASS, 'ffmpeg', 'ffmpeg.exe')
+    # Windows: PyInstaller 打包
+    if IS_WIN and getattr(sys, 'frozen', False):
+        # _MEIPASS (--add-data puts files here)
+        if hasattr(sys, '_MEIPASS'):
+            bundled = os.path.join(sys._MEIPASS, 'ffmpeg', 'ffmpeg.exe')
+            if os.path.exists(bundled):
+                return bundled
+        # Also check next to the exe (--onedir mode)
+        bundled = os.path.join(os.path.dirname(sys.executable), 'ffmpeg', 'ffmpeg.exe')
         if os.path.exists(bundled):
             return bundled
 
+    # 开发模式：查找系统 FFmpeg
     if IS_WIN:
         return 'ffmpeg'
     for p in ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg',
