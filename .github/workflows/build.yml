@@ -15,7 +15,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.13'
 
     - name: Install dependencies
       run: pip install PyQt6 pyinstaller
@@ -65,7 +65,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.13'
 
     - name: Install dependencies
       run: pip install PyQt6 pyinstaller
@@ -92,19 +92,85 @@ jobs:
           --osx-bundle-identifier="com.ellapuede.videocompressor" \
           video_compressor.py
 
-    - name: Bundle FFmpeg and fix Info.plist
+    - name: Bundle FFmpeg and fix app bundle
       run: |
         APP="dist/EllaPuede视频压缩工具.app"
         
         # Copy FFmpeg into Resources
         cp -r ffmpeg "$APP/Contents/Resources/"
         
-        # Fix Info.plist — add required keys that PyInstaller misses
+        # Fix Info.plist
         PLIST="$APP/Contents/Info.plist"
         /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 3.0" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 3.0" "$PLIST"
-        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 3.0.1" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 3.0.1" "$PLIST"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 3.0.4" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 3.0.4" "$PLIST"
         /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName EllaPuede视频压缩工具" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string EllaPuede视频压缩工具" "$PLIST"
         /usr/libexec/PlistBuddy -c "Set :NSHighResolutionCapable true" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :NSHighResolutionCapable bool true" "$PLIST"
+        
+        # Fix Qt framework bundles — add Info.plist to each .framework
+        # This prevents CFBundleCopyBundleURL crash on macOS
+        for fw in "$APP/Contents/Frameworks/"Qt*.framework; do
+          if [ -d "$fw" ]; then
+            FW_NAME=$(basename "$fw" .framework)
+            FW_PLIST="$fw/Resources/Info.plist"
+            mkdir -p "$fw/Resources"
+            if [ ! -f "$FW_PLIST" ]; then
+              cat > "$FW_PLIST" << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>CFBundleIdentifier</key>
+          <string>org.qt-project.${FW_NAME}</string>
+          <key>CFBundleName</key>
+          <string>${FW_NAME}</string>
+          <key>CFBundleVersion</key>
+          <string>6.0</string>
+          <key>CFBundleShortVersionString</key>
+          <string>6.0</string>
+          <key>CFBundlePackageType</key>
+          <string>FMWK</string>
+        </dict>
+        </plist>
+        EOF
+              echo "Created Info.plist for $FW_NAME"
+            fi
+          fi
+        done
+        
+        # Also fix Qt .framework dirs that are just dylibs (PyInstaller flattens them)
+        # Create proper framework structure for QtCore if it's just a dylib
+        for dylib in "$APP/Contents/Frameworks/"Qt*; do
+          if [ -f "$dylib" ] && [ ! -d "$dylib" ]; then
+            DYLIB_NAME=$(basename "$dylib")
+            FW_DIR="$APP/Contents/Frameworks/${DYLIB_NAME}.framework"
+            if [ ! -d "$FW_DIR" ]; then
+              mkdir -p "$FW_DIR/Versions/A/Resources"
+              mv "$dylib" "$FW_DIR/Versions/A/${DYLIB_NAME}"
+              ln -sf "Versions/A/${DYLIB_NAME}" "$FW_DIR/${DYLIB_NAME}"
+              ln -sf "Versions/A/Resources" "$FW_DIR/Resources"
+              ln -sf "A" "$FW_DIR/Versions/Current"
+              cat > "$FW_DIR/Versions/A/Resources/Info.plist" << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>CFBundleIdentifier</key>
+          <string>org.qt-project.${DYLIB_NAME}</string>
+          <key>CFBundleName</key>
+          <string>${DYLIB_NAME}</string>
+          <key>CFBundleVersion</key>
+          <string>6.0</string>
+          <key>CFBundleShortVersionString</key>
+          <string>6.0</string>
+          <key>CFBundlePackageType</key>
+          <string>FMWK</string>
+        </dict>
+        </plist>
+        EOF
+              echo "Restructured $DYLIB_NAME as framework"
+            fi
+          fi
+        done
         
         # Verify
         /usr/libexec/PlistBuddy -c "Print" "$PLIST"
@@ -116,10 +182,9 @@ jobs:
 
     - name: Test app launches
       run: |
-        # Quick smoke test — launch and kill after 3 seconds
         "dist/EllaPuede视频压缩工具.app/Contents/MacOS/EllaPuede视频压缩工具" &
         APP_PID=$!
-        sleep 3
+        sleep 5
         if kill -0 $APP_PID 2>/dev/null; then
           echo "App launched successfully"
           kill $APP_PID
