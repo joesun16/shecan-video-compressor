@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EllaPuede V3.0</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;
+    /* 渐变底色，给毛玻璃提供可透的背景 */
+    background: linear-gradient(135deg, #4a90d9 0%, #357abd 40%, #2a6cb0 70%, #1d5fa0 100%);
+    min-height: 100vh;
+    padding: 40px 20px;
+    color: #fff;
+  }
+
+  .page-title {
+    text-align: center;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 24px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    max-width: 900px;
+    margin: 0 auto 32px;
+  }
+
+  /* ===== 毛玻璃卡片 ===== */
+  .card {
+    aspect-ratio: 1;
+    border-radius: 18px;
+    padding: 22px 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    /* 毛玻璃 */
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  }
+
+  /* 9张渐变：透明度从浅到深 */
+  .card-1 { background: rgba(255,255,255,0.18); }
+  .card-2 { background: rgba(255,255,255,0.16); }
+  .card-3 { background: rgba(255,255,255,0.14); }
+  .card-4 { background: rgba(255,255,255,0.13); }
+  .card-5 { background: rgba(255,255,255,0.11); }
+  .card-6 { background: rgba(255,255,255,0.10); }
+  .card-7 { background: rgba(255,255,255,0.09); }
+  .card-8 { background: rgba(255,255,255,0.08); }
+  .card-9 { background: rgba(255,255,255,0.07); }
+
+  /* ===== 统一字体系统 ===== */
+  .card .title {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #fff;
+    margin-bottom: 10px;
+  }
+  .card .desc {
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.8;
+    color: rgba(255,255,255,0.75);
+  }
+  .card .desc .hl {
+    color: #fff;
+    font-weight: 600;
+  }
+  .card .tag {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 500;
+    margin-top: 12px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.8);
+    width: fit-content;
+  }
+
+  /* ===== 卡片 1: 更名通知 ===== */
+  .card-1 { text-align: center; align-items: center; }
+  .card-1 .badge {
+    font-size: 10px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.8);
+    padding: 4px 12px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    display: inline-block;
+    margin-bottom: 14px;
+    width: fit-content;
+  }
+  .card-1 .ver {
+    font-size: 32px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.5px;
+  }
+  .card-1 .sub {
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.65);
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+
+  /* ===== 卡片 5: 品牌中心 ===== */
+  .card-5 { text-align: center; align-items: center; }
+  .card-5 .logo {
+    font-size: 34px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.5px;
+  }
+  .card-5 .she-can {
+    font-size: 10px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.45);
+    margin-top: 6px;
+    letter-spacing: 3px;
+  }
+  .card-5 .sub {
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.65);
+    margin-top: 14px;
+    line-height: 1.6;
+  }
+
+  /* ===== 卡片 9: 下载 ===== */
+  .card-9 { text-align: center; align-items: center; }
+  .card-9 .dl-btn {
+    display: inline-block;
+    margin-top: 14px;
+    padding: 4px 14px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 10px;
+    color: rgba(255,255,255,0.8);
+    font-size: 10px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 0.2s;
+  }
+  .card-9 .dl-btn:hover { background: rgba(255,255,255,0.2); }
+
+  /* ===== 底部按钮 ===== */
+  .actions { text-align: center; margin-top: 8px; }
+  .actions button {
+    padding: 10px 28px;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    border-radius: 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-family: inherit;
+  }
+  .actions button:hover { background: rgba(255,255,255,0.25); }
+  .actions .hint {
+    color: rgba(255,255,255,0.4);
+    font-size: 11px;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<p class="page-title">EllaPuede 视频压缩工具 V3.0</p>
+
+<div class="grid">
+
+  <div class="card card-1" id="card-1">
+    <div class="badge">原 SheCan · 正式更名</div>
+    <div class="ver">V3.0</div>
+    <div class="sub">全新品牌<br>全新体验</div>
+  </div>
+
+  <div class="card card-2" id="card-2">
+    <div class="title">并行压缩</div>
+    <div class="desc">同时处理多个文件<br>GPU 编码建议 <span class="hl">2-4</span> 并行<br>CPU 编码建议 <span class="hl">1-2</span> 并行<br>速度成倍提升</div>
+    <span class="tag">全新功能</span>
+  </div>
+
+  <div class="card card-3" id="card-3">
+    <div class="title">极致压缩</div>
+    <div class="desc">新增 <span class="hl">极致压缩</span> 档位<br>新增 <span class="hl">360p</span> 分辨率<br>邮件传输、网盘分享<br>体积压到最小</div>
+    <span class="tag">全新功能</span>
+  </div>
+
+  <div class="card card-4" id="card-4">
+    <div class="title">智能音频处理</div>
+    <div class="desc">自动检测输入音频编码<br>已是低码率 AAC 时<br><span class="hl">直接拷贝，零损失</span><br>避免无意义重编码</div>
+    <span class="tag">全新功能</span>
+  </div>
+
+  <div class="card card-5" id="card-5">
+    <div class="logo">EllaPuede</div>
+    <div class="she-can">SHE CAN</div>
+    <div class="sub">视频批量压缩工具<br>全新升级</div>
+  </div>
+
+  <div class="card card-6" id="card-6">
+    <div class="title">动态码率</div>
+    <div class="desc">GPU 编码器根据<br><span class="hl">目标分辨率</span>自动计算<br>最优码率<br>4K 不糊，360p 不浪费</div>
+    <span class="tag">智能升级</span>
+  </div>
+
+  <div class="card card-7" id="card-7">
+    <div class="title">内置参数指南</div>
+    <div class="desc">5 种常见场景<br>一键推荐最佳参数组合<br>发社交媒体 / 存档备份<br>剪辑素材 / 极致传输</div>
+    <span class="tag">全新功能</span>
+  </div>
+
+  <div class="card card-8" id="card-8">
+    <div class="title">macOS + Windows</div>
+    <div class="desc">Apple GPU / NVIDIA / AMD / Intel<br>硬件加速全覆盖<br><span class="hl">FFmpeg 内置</span><br>安装即用，零配置</div>
+    <span class="tag">双平台</span>
+  </div>
+
+  <div class="card card-9" id="card-9">
+    <div class="title">免费下载</div>
+    <div class="desc">macOS DMG / Windows 安装包<br>开源 · MIT 协议</div>
+    <a class="dl-btn" href="https://github.com/joesun16/shecan-video-compressor/releases/latest" target="_blank">GitHub Releases →</a>
+  </div>
+
+</div>
+
+<div class="actions">
+  <button onclick="downloadAll()">批量下载 9 张图片</button>
+  <p class="hint">逐张截图保存为 PNG</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script>
+async function downloadAll() {
+  const btn = document.querySelector('.actions button');
+  btn.textContent = '正在生成...';
+  btn.disabled = true;
+
+  // 每张卡片对应的实色背景（模拟毛玻璃在蓝色渐变上的效果）
+  const bgColors = [
+    '#5a9ad8', '#5596d4', '#5092d0', '#4c8ecc',
+    '#488ac8', '#4486c4', '#4082c0', '#3c7ebc', '#387ab8'
+  ];
+
+  for (let i = 1; i <= 9; i++) {
+    const el = document.getElementById('card-' + i);
+    try {
+      const canvas = await html2canvas(el, {
+        backgroundColor: bgColors[i - 1],
+        scale: 3,
+        useCORS: true,
+        logging: false,
+      });
+      const link = document.createElement('a');
+      link.download = `EllaPuede_V3.0_${i}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      await new Promise(r => setTimeout(r, 500));
+    } catch (e) { console.error('Card ' + i + ':', e); }
+  }
+  btn.textContent = '下载完成';
+  setTimeout(() => { btn.textContent = '批量下载 9 张图片'; btn.disabled = false; }, 2000);
+}
+</script>
+</body>
+</html>
