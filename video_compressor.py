@@ -21,10 +21,11 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QComboBox, QProgressBar, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QLineEdit,
-    QAbstractItemView, QDialog, QMessageBox, QSpinBox
+    QAbstractItemView, QDialog, QMessageBox, QSpinBox,
+    QScrollArea, QMenu
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QLocale, QTimer
-from PyQt6.QtGui import QColor, QAction
+from PyQt6.QtGui import QColor, QAction, QShortcut, QKeySequence
 
 # ============ 常量 ============
 VERSION = '3.0'
@@ -1255,7 +1256,6 @@ class MainWindow(QMainWindow):
         guide_outer = QVBoxLayout(self.guide_panel)
         guide_outer.setContentsMargins(0, 0, 0, 0)
 
-        from PyQt6.QtWidgets import QScrollArea
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -1445,7 +1445,6 @@ class MainWindow(QMainWindow):
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._show_table_menu)
         # Delete/Backspace 快捷键删除
-        from PyQt6.QtGui import QShortcut, QKeySequence
         QShortcut(QKeySequence.StandardKey.Delete, self.table, self.remove_selected)
         QShortcut(QKeySequence(Qt.Key.Key_Backspace), self.table, self.remove_selected)
         layout.addWidget(self.table, 1)
@@ -1676,7 +1675,6 @@ class MainWindow(QMainWindow):
         """右键菜单"""
         if self._is_compressing:
             return
-        from PyQt6.QtWidgets import QMenu
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu { background: white; border: 1px solid #d2d2d7; border-radius: 6px; padding: 4px 0; }
