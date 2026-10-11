@@ -4,7 +4,7 @@ on:
   push:
     branches: ['codex/v3.3-stability']
     paths:
-      - 'EllaPuede-3.3.0-source.zip'
+      - 'EllaPuede-3.3.0-source-r2.zip'
       - '.github/workflows/windows-3.3-validation.yml'
   workflow_dispatch:
 
@@ -18,8 +18,8 @@ concurrency:
 env:
   PYTHONUTF8: '1'
   PYTHONIOENCODING: utf-8
-  SOURCE_ZIP: EllaPuede-3.3.0-source.zip
-  SOURCE_SHA256: cc9b50bb22b12a0b6e60bfafc11461a434ead9e5caa191b0b9e6f0fc282e1712
+  SOURCE_ZIP: EllaPuede-3.3.0-source-r2.zip
+  SOURCE_SHA256: 9d065a54e6651128749b0541b4825e77be2b317e6f2427147ecbe53acdc8a686
 
 jobs:
   validate-windows:
@@ -116,7 +116,7 @@ jobs:
         env:
           ELLAPUEDE_FFMPEG_DIR: ${{ github.workspace }}/source/EllaPuede-3.3.0-source/ffmpeg
           ELLAPUEDE_DATA_DIR: ${{ runner.temp }}/ellapuede-source-330
-          QT_QPA_PLATFORM: offscreen
+          QT_QPA_PLATFORM: windows
         run: |
           @'
           import json, os, platform, sys, unittest
