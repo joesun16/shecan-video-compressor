@@ -19,7 +19,7 @@ env:
   PYTHONUTF8: '1'
   PYTHONIOENCODING: utf-8
   SOURCE_ZIP: EllaPuede-3.4.0-source.zip
-  SOURCE_SHA256: 75914db62eae09edf15b1a2a1d133d43d5fa0138043b5bb5c85cf892332311a5
+  SOURCE_SHA256: 8b374acbd02c8d6b214ab127ee2427f653cdaa580a781e6a35f782d1d004a3ef
 
 jobs:
   validate-windows:
