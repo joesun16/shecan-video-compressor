@@ -1,0 +1,211 @@
+name: Validate EllaPuede 3.3.0 on Windows
+
+on:
+  push:
+    branches: ['codex/v3.3-stability']
+    paths:
+      - 'EllaPuede-3.3.0-source.zip'
+      - '.github/workflows/windows-3.3-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ellapuede-330-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: '1'
+  PYTHONIOENCODING: utf-8
+  SOURCE_ZIP: EllaPuede-3.3.0-source.zip
+  SOURCE_SHA256: cc9b50bb22b12a0b6e60bfafc11461a434ead9e5caa191b0b9e6f0fc282e1712
+
+jobs:
+  validate-windows:
+    if: github.repository == 'joesun16/shecan-video-compressor' && github.ref == 'refs/heads/codex/v3.3-stability'
+    runs-on: windows-2022
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out the dedicated test branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.13 x64
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: x64
+
+      - name: Verify and safely unpack the approved source archive
+        run: |
+          @'
+          import hashlib, json, os, shutil, stat, zipfile
+          from pathlib import Path, PurePosixPath
+          root = Path(os.environ['GITHUB_WORKSPACE'])
+          evidence = root / 'windows-evidence'
+          evidence.mkdir()
+          archive = root / os.environ['SOURCE_ZIP']
+          with archive.open('rb') as stream:
+              actual = hashlib.file_digest(stream, 'sha256').hexdigest()
+          provenance = {'archive': archive.name, 'sha256': actual,
+                        'expected_sha256': os.environ['SOURCE_SHA256'],
+                        'workflow_commit': os.environ['GITHUB_SHA'],
+                        'runner_os': os.environ['RUNNER_OS']}
+          (evidence / 'source-provenance.json').write_text(json.dumps(provenance, indent=2), encoding='utf-8')
+          if actual != os.environ['SOURCE_SHA256']:
+              raise SystemExit('Source ZIP SHA-256 mismatch; nothing was extracted')
+          destination = root / 'source'
+          destination.mkdir()
+          with zipfile.ZipFile(archive) as zipped:
+              members = zipped.infolist()
+              if len(members) > 1000 or sum(m.file_size for m in members) > 50_000_000:
+                  raise SystemExit('Unexpected archive size')
+              seen = set()
+              for member in members:
+                  path = PurePosixPath(member.filename)
+                  if (path.is_absolute() or '\\' in member.filename or ':' in member.filename
+                          or '..' in path.parts or not path.parts
+                          or path.parts[0] != 'EllaPuede-3.3.0-source'
+                          or stat.S_ISLNK(member.external_attr >> 16)):
+                      raise SystemExit('Unsafe archive member: ' + member.filename)
+                  identity = str(path).casefold()
+                  if identity in seen:
+                      raise SystemExit('Duplicate archive member: ' + member.filename)
+                  seen.add(identity)
+                  target = destination.joinpath(*path.parts)
+                  if not target.resolve().is_relative_to(destination.resolve()):
+                      raise SystemExit('Archive member escapes the extraction directory')
+                  if member.is_dir():
+                      target.mkdir(parents=True, exist_ok=True)
+                  else:
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      with zipped.open(member) as src, target.open('xb') as dst:
+                          shutil.copyfileobj(src, dst)
+          source = destination / 'EllaPuede-3.3.0-source'
+          inputs = json.loads((source / 'BUILD-INPUTS-macOS.json').read_text(encoding='utf-8'))
+          for filename, expected in inputs['source_sha256'].items():
+              if hashlib.sha256((source / filename).read_bytes()).hexdigest() != expected:
+                  raise SystemExit('Source manifest mismatch: ' + filename)
+          print('Verified source:', actual, 'files:', len(members))
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Source verification failed' }
+
+      - name: Install the pinned build dependencies
+        working-directory: source/EllaPuede-3.3.0-source
+        run: |
+          python -m pip install -r requirements-build.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
+
+      - name: Download and verify the fixed native Windows FFmpeg build
+        working-directory: source/EllaPuede-3.3.0-source
+        run: |
+          python scripts/download_ffmpeg_windows.py
+          if ($LASTEXITCODE -ne 0) { throw 'FFmpeg download or checksum verification failed' }
+          & '.\ffmpeg\ffmpeg.exe' -version
+          if ($LASTEXITCODE -ne 0) { throw 'Native FFmpeg does not run' }
+          & '.\ffmpeg\ffprobe.exe' -version
+          if ($LASTEXITCODE -ne 0) { throw 'Native FFprobe does not run' }
+
+      - name: Run all 60 source regressions on Windows
+        working-directory: source/EllaPuede-3.3.0-source
+        env:
+          ELLAPUEDE_FFMPEG_DIR: ${{ github.workspace }}/source/EllaPuede-3.3.0-source/ffmpeg
+          ELLAPUEDE_DATA_DIR: ${{ runner.temp }}/ellapuede-source-330
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          @'
+          import json, os, platform, sys, unittest
+          from pathlib import Path
+          suite = unittest.defaultTestLoader.discover('tests')
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          summary = {'platform': platform.platform(), 'python': platform.python_version(),
+                     'tests_run': result.testsRun, 'failures': len(result.failures),
+                     'errors': len(result.errors), 'skipped': result.skipped,
+                     'status': 'passed' if result.wasSuccessful() and result.testsRun == 60 and not result.skipped else 'failed'}
+          report = Path(os.environ['GITHUB_WORKSPACE']) / 'windows-evidence' / 'windows-source-test.json'
+          report.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding='utf-8')
+          sys.exit(0 if summary['status'] == 'passed' else 1)
+          '@ | python -u - 2>&1 | Tee-Object -FilePath '../../windows-evidence/regression-tests-windows.txt'
+          if ($LASTEXITCODE -ne 0) { throw 'Source regressions failed or were skipped' }
+
+      - name: Build the self-contained Windows application
+        working-directory: source/EllaPuede-3.3.0-source
+        run: |
+          python scripts/build_app.py --ffmpeg-dir ffmpeg 2>&1 | Tee-Object -FilePath '../../windows-evidence/build-windows.txt'
+          if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed' }
+          Copy-Item build-inputs.json '../../windows-evidence/build-inputs-windows.json'
+
+      - name: Test the native Windows portable app with an empty PATH
+        working-directory: source/EllaPuede-3.3.0-source
+        run: |
+          Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+          python scripts/run_package_test.py 'dist/EllaPuede视频压缩工具/EllaPuede视频压缩工具.exe' --report '../../windows-evidence/windows-package-test.json' 2>&1 | Tee-Object -FilePath '../../windows-evidence/windows-package-test.txt'
+          if ($LASTEXITCODE -ne 0) { throw 'Portable application self-test failed' }
+          $report = Get-Content '../../windows-evidence/windows-package-test.json' -Raw | ConvertFrom-Json
+          if ($report.qt_platform -ne 'windows' -or !$report.frozen -or !$report.empty_path) { throw 'Native, frozen, clean-PATH test required' }
+
+      - name: Build the Windows installer
+        working-directory: source/EllaPuede-3.3.0-source
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $compiler)) { throw 'Inno Setup compiler is unavailable on this runner' }
+          & $compiler installer.iss 2>&1 | Tee-Object -FilePath '../../windows-evidence/installer-build.txt'
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed' }
+
+      - name: Install into a path containing Chinese characters and spaces
+        id: install
+        working-directory: source/EllaPuede-3.3.0-source
+        run: |
+          $installers = @(Get-ChildItem installer_output -Filter '*.exe')
+          if ($installers.Count -ne 1) { throw 'Expected one installer' }
+          $target = Join-Path $env:RUNNER_TEMP 'EllaPuede 安装测试 3.3.0'
+          $log = Join-Path $env:GITHUB_WORKSPACE 'windows-evidence\installation.log'
+          "ELLAPUEDE_INSTALL_TARGET=$target" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $process = Start-Process -FilePath $installers[0].FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=`"$target`"", "/LOG=`"$log`"") -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+          if (!(Test-Path "$target\EllaPuede视频压缩工具.exe")) { throw 'Installed executable is missing' }
+
+      - name: Test the installed native Windows app
+        working-directory: source/EllaPuede-3.3.0-source
+        run: |
+          Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+          python scripts/run_package_test.py "$env:ELLAPUEDE_INSTALL_TARGET\EllaPuede视频压缩工具.exe" --report '../../windows-evidence/windows-installed-test.json' 2>&1 | Tee-Object -FilePath '../../windows-evidence/windows-installed-test.txt'
+          if ($LASTEXITCODE -ne 0) { throw 'Installed application self-test failed' }
+          $report = Get-Content '../../windows-evidence/windows-installed-test.json' -Raw | ConvertFrom-Json
+          if ($report.qt_platform -ne 'windows' -or !$report.frozen -or !$report.empty_path) { throw 'Installed test did not use the native Windows platform' }
+
+      - name: Verify uninstall after an installation attempt
+        if: always() && steps.install.outcome == 'success'
+        run: |
+          $target = $env:ELLAPUEDE_INSTALL_TARGET
+          $process = Start-Process -FilePath "$target\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru -Wait
+          $remaining = Test-Path "$target\EllaPuede视频压缩工具.exe"
+          @{ exit_code = $process.ExitCode; application_remaining = $remaining } | ConvertTo-Json | Set-Content 'windows-evidence/uninstall-test.json' -Encoding utf8
+          if ($process.ExitCode -ne 0 -or $remaining) { throw 'Uninstall verification failed' }
+
+      - name: Upload Windows test evidence even when a check fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EllaPuede-3.3.0-Windows-test-evidence
+          path: windows-evidence/
+          if-no-files-found: warn
+
+      - name: Upload the tested Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: EllaPuede-3.3.0-Windows-x64-Installer
+          path: source/EllaPuede-3.3.0-source/installer_output/*.exe
+          if-no-files-found: error
+
+      - name: Upload the tested portable Windows app
+        uses: actions/upload-artifact@v4
+        with:
+          name: EllaPuede-3.3.0-Windows-x64-Portable
+          path: source/EllaPuede-3.3.0-source/dist/EllaPuede视频压缩工具/
+          if-no-files-found: error
