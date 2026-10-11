@@ -4,7 +4,7 @@ on:
   push:
     branches: ['codex/v3.3-stability']
     paths:
-      - 'EllaPuede-3.3.0-source-r2.zip'
+      - 'EllaPuede-3.3.0-source-r3.zip'
       - '.github/workflows/windows-3.3-validation.yml'
   workflow_dispatch:
 
@@ -18,8 +18,8 @@ concurrency:
 env:
   PYTHONUTF8: '1'
   PYTHONIOENCODING: utf-8
-  SOURCE_ZIP: EllaPuede-3.3.0-source-r2.zip
-  SOURCE_SHA256: 9d065a54e6651128749b0541b4825e77be2b317e6f2427147ecbe53acdc8a686
+  SOURCE_ZIP: EllaPuede-3.3.0-source-r3.zip
+  SOURCE_SHA256: 280e2271d664ce914c9c8c3a416fb0f80b2979123cb0a92c492b7721d74bc189
 
 jobs:
   validate-windows:
@@ -147,7 +147,7 @@ jobs:
           python scripts/run_package_test.py 'dist/EllaPuede视频压缩工具/EllaPuede视频压缩工具.exe' --report '../../windows-evidence/windows-package-test.json' 2>&1 | Tee-Object -FilePath '../../windows-evidence/windows-package-test.txt'
           if ($LASTEXITCODE -ne 0) { throw 'Portable application self-test failed' }
           $report = Get-Content '../../windows-evidence/windows-package-test.json' -Raw | ConvertFrom-Json
-          if ($report.qt_platform -ne 'windows' -or !$report.frozen -or !$report.empty_path) { throw 'Native, frozen, clean-PATH test required' }
+          if ($report.qt_platform -ne 'windows' -or !$report.frozen -or !$report.clean_path) { throw 'Native, frozen, clean-PATH test required' }
 
       - name: Build the Windows installer
         working-directory: source/EllaPuede-3.3.0-source
@@ -177,7 +177,7 @@ jobs:
           python scripts/run_package_test.py "$env:ELLAPUEDE_INSTALL_TARGET\EllaPuede视频压缩工具.exe" --report '../../windows-evidence/windows-installed-test.json' 2>&1 | Tee-Object -FilePath '../../windows-evidence/windows-installed-test.txt'
           if ($LASTEXITCODE -ne 0) { throw 'Installed application self-test failed' }
           $report = Get-Content '../../windows-evidence/windows-installed-test.json' -Raw | ConvertFrom-Json
-          if ($report.qt_platform -ne 'windows' -or !$report.frozen -or !$report.empty_path) { throw 'Installed test did not use the native Windows platform' }
+          if ($report.qt_platform -ne 'windows' -or !$report.frozen -or !$report.clean_path) { throw 'Installed test did not use the native Windows platform' }
 
       - name: Verify uninstall after an installation attempt
         if: always() && steps.install.outcome == 'success'
